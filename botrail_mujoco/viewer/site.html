@@ -484,10 +484,10 @@ function updateDiff(i, a) {
   const on = $("diffOn").checked && mode !== "botrail" && rec.meta.plan;
   $("legend").hidden = mode === "botrail" || !rec.meta.plan;
   if (!rec.meta.plan || mode === "botrail") { colour(null); return; }
-  const tr = track(mode), plan = rec.meta.plan;
+  const trk = track(mode), plan = rec.meta.plan;  // 지역 변수 trk(트랙): i18n 함수 tr 과 이름 겹치면 tr("..") 가 깨진다
   let worst = 0; const per = {};
   for (const b of rec.diffBodies) {
-    const pe = bodyPos(tr.d, tr.P, tr.idx, b, i, a), pp = bodyPos(plan, rec.tracks.plan.P, rec.tracks.plan.idx, b, i, a);
+    const pe = bodyPos(trk.d, trk.P, trk.idx, b, i, a), pp = bodyPos(plan, rec.tracks.plan.P, rec.tracks.plan.idx, b, i, a);
     if (!pe || !pp) continue;
     const dist = Math.hypot(pe[0] - pp[0], pe[1] - pp[1], pe[2] - pp[2]);
     per[b] = dist; if (dist > worst) worst = dist;
@@ -520,8 +520,8 @@ function showTime() {
 function pose() {
   if (view3d && rec) {
     const [i, a] = frameIndex(rec.meta.t);
-    const tr = track(mode);
-    applyTrack(rec.bodies, tr.d.moving, tr.P, tr.Q, i, a);
+    const trk = track(mode);
+    applyTrack(rec.bodies, trk.d.moving, trk.P, trk.Q, i, a);
     updateDiff(i, a);
   }
   showTime();
