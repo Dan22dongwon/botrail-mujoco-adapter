@@ -705,17 +705,17 @@ class MujocoAdapter:
                     bodies[int(oid(name))] = usd
         for name, bname in conv.mocap.items():
             if oid(bname) >= 0:
-                bodies[int(oid(bname))] = "/World/Env/" + name
+                bodies[int(oid(bname))] = "/World/Env/" + name.lstrip("/")
         dt = model.opt.timestep
         frame_every = max(1, int(round(1 / fps / dt)))
         job = dict(usd=str((self.out / "cell_physics.usda").resolve()), dt=p.dt, t_end=float(p.t[-1]),
-                   frame_dt=frame_every * dt, robots=robots, moving=[("/World/Env/" + n) for n in p.moving],
+                   frame_dt=frame_every * dt, robots=robots, moving=[("/World/Env/" + n.lstrip("/")) for n in p.moving],
                    bodies=bodies, nbody=int(model.nbody),
-                   floor=[("/World/Env/" + e["name"]) for e in allowances_of(self.scene)
+                   floor=[("/World/Env/" + e["name"].lstrip("/")) for e in allowances_of(self.scene)
                           if e["kind"] == "set_obstacle_walkable" and e.get("walkable", True)],
                    # botrail 이 허용한 링크 ↔ 장애물 접촉 (트랙에 박힌 셔틀, 공정 접촉): Isaac 에서는 접촉 쌍을 거른다
                    allowed=[dict(robot=e.get("robot"), link=str(e["link"]).rstrip("/").rsplit("/", 1)[-1],
-                                 obstacle="/World/Env/" + str(e["obstacle"]))
+                                 obstacle="/World/Env/" + str(e["obstacle"]).lstrip("/"))
                             for e in allowances_of(self.scene) + list(self.allowances)
                             if e["kind"] == "allow_link_obstacle_contact"])
         arrays.update(t=p.t, obj_pos=p.obj_pos, obj_quat=p.obj_quat)

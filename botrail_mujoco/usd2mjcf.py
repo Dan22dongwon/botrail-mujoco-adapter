@@ -380,7 +380,7 @@ def convert(usd_path: Path, out_dir: Path, moving: list[str], *, timestep=0.001,
     env = stage.GetPrimAtPath("/World/Env")
     moving_paths = {}
     for name in sorted(moving, key=len):
-        path = "/World/Env/" + name
+        path = "/World/Env/" + name.lstrip("/")  # 중첩 경로(/World/Line/body/shell) 는 앞의 / 때문에 // 가 생겨 무효화됐다
         if not stage.GetPrimAtPath(path).IsValid():
             continue
         if any(path.startswith(p + "/") for p in moving_paths.values()):
