@@ -155,9 +155,11 @@ def shrink(src_json, src_bin, dst_json, dst_bin, fps, max_mb, cell_mm=3.0):
     quat = np.frombuffer(buf, np.float32, meta["quat"][1], meta["quat"][0]).reshape(len(t), nb * 4)
     src_fps = (len(t) - 1) / max(t[-1], 1e-9)
     mesh_bytes = sum(m["v"][1] * 4 + m["f"][1] * 4 for m in meta["meshes"].values()) * 0.9  # 단순화가 잘 안 되는 메쉬(차체 패널) 대비 보수적으로
-    # 포즈 데이터는 트랙마다 바디 수가 다르다 (plan/isaac 에 차체 패널이 더 많을 수 있음) — 실제 합으로 추정
-    track_nb = nb + sum(len(json.loads(tj.read_text()).get("moving", []))
-                        for tj in (src_json.with_name("plan.json"), src_json.with_name("isaac.json")) if tj.exists())
+    # 비교 트랙(plan/isaac) 바디 수. 차체(BIW)처럼 리지드 바디가 수백 패널로 쪼개진 셀은 여기가 폭증한다.
+    cmp_nb = sum(len(json.loads(tj.read_text()).get("moving", []))
+                 for tj in (src_json.with_name("plan.json"), src_json.with_name("isaac.json")) if tj.exists())
+    drop_cmp = cmp_nb > 80  # 초복잡 셀: 비교 트랙 생략 → 바디 수·용량 급감, MuJoCo 3D 는 정상 렌더 (deviation 히트맵만 없음)
+    track_nb = nb + (0 if drop_cmp else cmp_nb)
     while True:
         step = max(1, int(round(src_fps / fps)))
         idx = np.arange(0, len(t), step)
@@ -187,6 +189,8 @@ def shrink(src_json, src_bin, dst_json, dst_bin, fps, max_mb, cell_mm=3.0):
                tcp_mm=[meta["tcp_mm"][i] for i in idx])
     # 비교용 트랙: botrail 계획(plan) · Isaac Sim(isaac). 같은 MuJoCo 바디 순서, 웹 프레임 시각으로 맞춘다.
     for key, fname in (("plan", "plan.json"), ("isaac", "isaac.json")):
+        if drop_cmp:
+            break
         tj = src_json.with_name(fname)
         if not tj.exists():
             continue
