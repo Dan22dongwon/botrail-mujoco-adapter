@@ -226,6 +226,24 @@ def main():
             if r["mobile"]:
                 r["art_path"] = detach_mobile_root(stage, r, floor)
 
+        # 정적 구조물(셀 베드·포스트·레일·용접 컨트롤러 등)은 botrail 에선 바닥에 고정된 집기다.
+        # PhysX 는 RigidBodyAPI 가 켜져 있고 고정 조인트가 없으면 중력에 무너뜨린다 → 로봇 링크가 아닌
+        # 강체는 모두 정적(rigidBodyEnabled=False)으로 돌려 충돌체로만 남긴다. 이동체는 그 위에 xform op 로
+        # 운동학적 이동을 그대로 한다. (MuJoCo 변환은 이런 집기를 처음부터 정적 geom 으로 둬 문제가 없었다.)
+        robot_roots = [r["root"] for r in job["robots"]]
+        n_static = 0
+        for prim in stage.Traverse():
+            p = str(prim.GetPath())
+            if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
+                continue
+            if any(p == rr or p.startswith(rr + "/") for rr in robot_roots):
+                continue  # 로봇 아티큘레이션 링크(모바일 루트 포함)는 건드리지 않는다
+            api = UsdPhysics.RigidBodyAPI(prim)
+            en = api.GetRigidBodyEnabledAttr()
+            if en.Get() if en.HasAuthoredValue() else True:
+                api.CreateRigidBodyEnabledAttr(False)
+                n_static += 1
+
         # 질량이 없는 로봇 링크: PhysX 는 충돌체 부피 × 1000 kg/m³ 로 질량을 만들어 큰 팔이 수백 kg 이 된다.
         # MuJoCo 변환과 같은 규칙(botrail mass_floor): 형상이 있으면 0.2 kg·반지름 5 cm 구 관성, 없으면 0.001 kg
         n_mass = 0
@@ -473,7 +491,8 @@ def main():
             t=FT, moving=moving, static=static, pos=[0, len(moving) * len(FT) * 3],
             quat=[len(Pb), len(moving) * len(FT) * 4]), separators=(",", ":")))
         rep = dict(supported=True, engine="Isaac Sim (PhysX)", physics_dt=dt, filtered_allowed_pairs=n_filtered,
-                   mimic_limits_added=n_mimic_lim, mass_assumed_links=n_mass, seconds=round(time.time() - t_start, 1),
+                   mimic_limits_added=n_mimic_lim, mass_assumed_links=n_mass, pinned_static_bodies=n_static,
+                   seconds=round(time.time() - t_start, 1),
                    robots={r["name"]: dict(max_joint_err_rad=round(err_max[j], 5),
                                            mean_joint_err_rad=round(err_sum[j] / max(n_err, 1), 6),
                                            missing_dofs=plans[j]["missing"],
