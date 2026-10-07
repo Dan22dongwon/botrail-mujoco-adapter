@@ -162,7 +162,7 @@ footer code{font-family:var(--mono);font-size:11.5px}
 
 <section class="player" id="player" hidden aria-label="3D 재생">
   <div class="ptop">
-    <button class="back" id="back">← 목록</button>
+    <button class="back" id="back" data-i18n="p_back">← 목록</button>
     <div class="ptitle"><b id="pTitle"></b><span id="pCat"></span></div>
     <div class="seg engines" role="group" aria-label="시뮬레이션 엔진">
       <button data-m="botrail" aria-pressed="true">botrail</button>
@@ -287,7 +287,7 @@ function applyLang(l) {
   document.querySelectorAll("#langsw button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.lang === l)));
 }
 { const s = document.createElement("style"); s.textContent =
-  "header{position:relative}.langsw{position:absolute;top:12px;right:16px;display:flex;gap:4px;z-index:2}" +
+  ".langsw{display:flex;gap:4px;justify-content:flex-end;margin:0 0 8px}" +   /* 제목 위 우측 정렬 — 겹침 없음 */
   ".langsw button{font:inherit;font-size:12px;padding:3px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer}" +
   ".langsw button[aria-pressed=true]{background:var(--ink);color:var(--bg);border-color:var(--ink)}";
   document.head.appendChild(s); }
