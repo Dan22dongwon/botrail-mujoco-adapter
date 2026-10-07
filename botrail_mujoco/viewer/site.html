@@ -230,7 +230,8 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", 
 const BUILD = "__BUILD__";  // 배포 때 바뀜 → 브라우저·CDN 캐시에 남은 옛 데이터를 쓰지 않게
 const INDEX = await fetch(`data/index.json?v=${BUILD}`, {cache: "no-cache"}).then(r => r.json());
 const HIDE_CAT = new Set(["그리핑", "셀 엔지니어링", "강화학습", "Export"]);  // DM 용: 공정과 거리 먼 카테고리 숨김
-const items = INDEX.items.filter(x => !HIDE_CAT.has(x.category)), ready = items.filter(x => x.ready);
+const HIDE_ID = new Set(["spindle_mounting_demo", "physics_conveyor"]);  // 검증·테스트 성격 셀 숨김 (사용자 요청)
+const items = INDEX.items.filter(x => !HIDE_CAT.has(x.category) && !HIDE_ID.has(x.id)), ready = items.filter(x => x.ready);
 const CATS = INDEX.categories.filter(c => !HIDE_CAT.has(c));
 
 // ---------- 목록: 공정별 가로 스와이프 행 ----------
@@ -527,10 +528,11 @@ function pose() {
   showTime();
 }
 function available(m) {
+  // 엔진 버튼은 누르면 (3D 분석 중이어도 set3D(false) 로) 그 엔진의 영상으로 넘어간다.
+  // 그러니 영상 유무로만 켜고 끈다 — 무거운 셀은 3D 비교 트랙(plan/isaac)을 생략(drop_cmp)하지만
+  // 영상은 있으므로, 예전처럼 3D 중에 botrail/isaac 버튼이 꺼져 영상으로 못 넘어가던 문제를 없앤다.
   if (!cur) return true;
-  if (!view3d) return !!cur.videos?.[m];
-  if (!rec) return cur.ready;
-  return m === "mujoco" || (m === "botrail" && !!rec.meta.plan) || (m === "isaac" && !!rec.meta.isaac);
+  return !!cur.videos?.[m];
 }
 function loadVideo(m) {  // 같은 시각에서 이어 보기
   const src = cur?.videos?.[m];
