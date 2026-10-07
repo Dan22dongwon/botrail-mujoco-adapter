@@ -68,7 +68,7 @@ class MujocoAdapter:
     def __init__(self, scene, sequences=None, out_dir="out/mujoco", *, timestep=0.001,
                  grasp_margin=0.6, approach_window=1.5, max_duration=300.0, tcp_payload_kg=0.0,
                  rollout_kwargs=None, allowances=(), torque_limits=True, track_tol_mm=20.0,
-                 collide_tol_mm=3.0, view=((2.9, -3.4, 2.6), (0.2, 0.2, 1.0))):
+                 collide_tol_mm=3.0, kinematic_conveyance=True, view=((2.9, -3.4, 2.6), (0.2, 0.2, 1.0))):
         self.scene = scene
         self.sequences = list(sequences or scene.sequence_names)
         if not self.sequences:
@@ -89,6 +89,7 @@ class MujocoAdapter:
         # 이 침투가 기하 근사 오차다. 최대 침투가 이 값 이하인 접촉은 'surface'(얕은 접촉)로 보고
         # verdict 의 collision 에서 제외한다. 깊은 겹침(팔이 패널을 뚫는 등)은 그대로 collision.
         self.collide_tol_mm = collide_tol_mm
+        self.kinematic_conveyance = kinematic_conveyance  # 장거리 직동 반송기는 운동학 구동(서보 흔들림 제거)
         # 원래 베이크 인자 (dt, scenario, physics, ...) 그대로. botrail 물리 베이크로 설계된 셀은
         # 부품이 내려앉은 상태를 전제로 계획되므로 physics 를 빼면 계획이 달라진다(실패할 수 있다).
         self.rollout_kwargs = {k: v for k, v in (rollout_kwargs or {}).items() if v is not None}
@@ -329,6 +330,15 @@ class MujocoAdapter:
                 T_root0 = _T(model.body_pos[rb], model.body_quat[rb])
                 T_b0 = _T(r["plan"].base_pos[0], r["plan"].base_quat[0])
                 r["base_off"] = np.linalg.inv(T_b0) @ T_root0
+        # 반송 메커니즘(장거리 직동 이송: 셔틀 트랙 캐리지 등)은 서보로 두면 빠른 왕복을 못 따라가
+        # 회전축이 흔들려(트레이 떨림) 추종오차가 크다. botrail 이 경로를 전부 정해주므로 운동학으로 구동한다
+        # (이동 베이스가 mocap 으로, 장애물이 mover 로 구동되는 것과 같은 취급). 식별: travel > 1 m 인 직동 관절.
+        for r in R:
+            jids = [oid(mujoco.mjtObj.mjOBJ_JOINT, n) for n in r["names"]]
+            r["dofadr"] = np.array([model.jnt_dofadr[j] for j in jids], int)
+            r["kinematic"] = self.kinematic_conveyance and r["mocap"] < 0 and any(
+                model.jnt_type[j] == mujoco.mjtJoint.mjJNT_SLIDE
+                and (model.jnt_range[j, 1] - model.jnt_range[j, 0]) > 1.0 for j in jids)
         if self.tcp_payload_kg:
             mujoco.mj_setConst(model, data)
         placeholder = self._unhold_placeholder_limits(model, R) if self.torque_limits else {}
@@ -427,6 +437,9 @@ class MujocoAdapter:
                 v = (1 - a) * r["vel"][k] + a * r["vel"][k + 1]
                 ai = r["act"][r["has"]]
                 data.ctrl[ai] = (q[r["cols"]] + kvkp[r["act"]] * v[r["cols"]])[r["has"]] if len(ai) else data.ctrl[ai]
+                if r["kinematic"]:  # 반송기: 계획 위치·속도를 바로 고정 → 서보 흔들림 없이 정확히 추종 (ctrl 도 맞춰 액추에이터가 안 싸움)
+                    data.qpos[r["qadr"]] = q[r["cols"]]
+                    data.qvel[r["dofadr"]] = v[r["cols"]]
             for r in R:
                 if r["mocap"] >= 0:
                     rp = r["plan"]

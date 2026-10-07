@@ -386,6 +386,7 @@ def main():
 
         plans = []
         revolute = {p.GetName() for p in stage.Traverse() if p.IsA(UsdPhysics.RevoluteJoint)}
+        prismatic = {p.GetName() for p in stage.Traverse() if p.IsA(UsdPhysics.PrismaticJoint)}
         for k, (art, r) in enumerate(zip(arts, job["robots"])):
             names = list(art.dof_names)
             idx = [names.index(n) for n in r["dofs"] if n in names]
@@ -399,7 +400,11 @@ def main():
             # 연속 회전 관절(바퀴·로터): PhysX 는 각도를 감아(wrap) 돌려주고 계획 각도는 계속 커진다 → 목표·오차를 감김 기준으로
             spin = np.array([np.ptp(q[:, c]) > np.pi and n in revolute for c, n in enumerate(np.array(r["dofs"])[cols])], bool) \
                 if len(idx) else np.zeros(0, bool)
-            plans.append(dict(art=art, idx=np.array(idx, int), q=q, v=v, spin=spin,
+            # 장거리 직동 반송기(셔틀 캐리지·랩핑 리프트·포크 마스트): 서보로 두면 빠른 이송을 못 따라가
+            # 축이 흔들린다(MuJoCo 쪽과 동일). 계획 궤적을 운동학으로 직접 적용(set_joint_positions)해 정확히 따른다.
+            kinematic = bool(len(idx)) and any(n in prismatic and np.ptp(q[:, c]) > 0.5
+                                               for c, n in enumerate(np.array(r["dofs"])[cols]))
+            plans.append(dict(art=art, idx=np.array(idx, int), q=q, v=v, spin=spin, kinematic=kinematic,
                               missing=[n for n in r["dofs"] if n not in names]))
 
         body_ids = sorted(int(b) for b in job["bodies"])
@@ -438,7 +443,11 @@ def main():
                 if pl["spin"].any():
                     cur = pl["art"].get_joint_positions()[pl["idx"]]
                     q = np.where(pl["spin"], cur + wrap(q - cur), q)
-                pl["art"].apply_action(ArticulationAction(joint_positions=q, joint_velocities=v, joint_indices=pl["idx"]))
+                if pl["kinematic"]:  # 반송기: 목표(PD)가 아니라 상태를 직접 설정 → 흔들림 없이 정확히 추종
+                    pl["art"].set_joint_positions(q, joint_indices=pl["idx"])
+                    pl["art"].set_joint_velocities(v, joint_indices=pl["idx"])
+                else:
+                    pl["art"].apply_action(ArticulationAction(joint_positions=q, joint_velocities=v, joint_indices=pl["idx"]))
             if not many or i % substeps == 0:  # 장애물이 많으면 프레임 시각에만 (기록되는 포즈는 정확)
                 set_env(t)
             set_bases(t - dt)  # 한 스텝 동안 계획 속도로 움직여 t 에 계획 포즈에 닿도록
