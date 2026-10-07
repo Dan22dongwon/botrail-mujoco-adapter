@@ -470,7 +470,7 @@ function setMode(m) {
   mode = m;
   try { localStorage.setItem("engine", m); } catch {}
   document.querySelectorAll(".engines button").forEach(b => {
-    b.setAttribute("aria-pressed", String(b.dataset.m === m));
+    b.setAttribute("aria-pressed", String(!view3d && b.dataset.m === m));  // 3D 분석 중이면 엔진(영상) 버튼은 비활성 표시
     b.disabled = !available(b.dataset.m);
     b.title = b.disabled ? (b.dataset.m === "isaac" ? (cur?.isaac?.reason || "Isaac 결과 없음") : "결과 없음") : "";
   });
@@ -499,7 +499,7 @@ async function set3D(on) {
   if (!on && playing) vid.play().catch(() => {});
 }
 $("v3d").onclick = () => set3D(!view3d);
-document.querySelectorAll(".engines button").forEach(b => b.onclick = () => setMode(b.dataset.m));
+document.querySelectorAll(".engines button").forEach(b => b.onclick = () => { if (view3d) set3D(false); setMode(b.dataset.m); });
 $("diffOn").onchange = () => { try { localStorage.setItem("diffOn", $("diffOn").checked ? "1" : "0"); } catch {} if (rec) pose(); };
 $("diffOn").checked = true;  // 기본: 켜짐 (끈 사람은 기억)
 try { if (localStorage.getItem("diffOn") === "0") $("diffOn").checked = false; } catch {}
