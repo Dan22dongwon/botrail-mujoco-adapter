@@ -169,22 +169,22 @@ footer code{font-family:var(--mono);font-size:11.5px}
       <button data-m="mujoco">MuJoCo</button>
       <button data-m="isaac">Isaac Sim</button>
     </div>
-    <button class="v3d" id="v3d" aria-pressed="false" title="인터랙티브 3D · 계획 대비 편차 히트맵">3D 분석</button>
+    <button class="v3d" id="v3d" aria-pressed="false" title="인터랙티브 3D · 계획 대비 편차 히트맵" data-i18n="p_3d">3D 분석</button>
     <button class="propbtn" id="propOpen" title="사이클타임·처리량·ROI 제안서 (링크 공유·PDF)" hidden>제안서</button>
   </div>
   <div class="stage" id="stage">
     <canvas id="c" hidden></canvas>
     <video id="vid" class="vid" muted playsinline preload="auto"></video>
     <span class="srcnote" id="srcNote"></span>
-    <div class="loading" id="loading">불러오는 중…</div>
-    <div class="hint" id="hint">드래그 회전 · 휠 줌</div>
+    <div class="loading" id="loading" data-i18n="p_loading">불러오는 중…</div>
+    <div class="hint" id="hint" data-i18n="p_hint">드래그 회전 · 휠 줌</div>
   </div>
   <div class="pbottom">
     <div class="controls">
       <button class="play" id="play" aria-label="재생">▶</button>
       <input class="seek" id="seek" type="range" min="0" max="1000" value="0" aria-label="재생 위치">
       <span class="time" id="time">0.0 / 0.0초</span>
-      <label class="diffbox" id="diffBox" title="계획 대비 바디 포즈 편차 히트맵"><input type="checkbox" id="diffOn"> 편차 표시</label>
+      <label class="diffbox" id="diffBox" title="계획 대비 바디 포즈 편차 히트맵"><input type="checkbox" id="diffOn"> <span data-i18n="p_diff">편차 표시</span></label>
       <button class="speed" id="speed" aria-label="재생 속도">1×</button>
     </div>
     <div class="result"><span class="pill" id="pPill"></span><p id="pSummary"></p></div>
@@ -192,7 +192,7 @@ footer code{font-family:var(--mono);font-size:11.5px}
       <span class="diffnow" id="diffNow"></span>
       <span><i style="background:#39a6ff"></i>1–5 mm</span><span><i style="background:#ff8a1f"></i>5–20 mm</span><span><i style="background:#e23a2e"></i>20 mm 이상</span>
     </div>
-    <details class="more" id="more"><summary>상세 지표</summary><div class="box" id="moreBox"></div></details>
+    <details class="more" id="more"><summary data-i18n="p_more">상세 지표</summary><div class="box" id="moreBox"></div></details>
   </div>
 </section>
 
@@ -229,7 +229,9 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
 const BUILD = "__BUILD__";  // 배포 때 바뀜 → 브라우저·CDN 캐시에 남은 옛 데이터를 쓰지 않게
 const INDEX = await fetch(`data/index.json?v=${BUILD}`, {cache: "no-cache"}).then(r => r.json());
-const items = INDEX.items, ready = items.filter(x => x.ready);
+const HIDE_CAT = new Set(["그리핑", "셀 엔지니어링", "강화학습", "Export"]);  // DM 용: 공정과 거리 먼 카테고리 숨김
+const items = INDEX.items.filter(x => !HIDE_CAT.has(x.category)), ready = items.filter(x => x.ready);
+const CATS = INDEX.categories.filter(c => !HIDE_CAT.has(c));
 
 // ---------- 목록: 공정별 가로 스와이프 행 ----------
 // ---------- 언어 전환 (랜딩 chrome: 한/영/일) ----------
@@ -262,6 +264,27 @@ const I18N = {
     st_cells: "botrail セル", st_mj: "MuJoCo 再現", st_pass: "PASS", st_isaac: "Isaac 相互検証",
   },
 };
+Object.assign(I18N.ko, { c_norec:"녹화 없음", c_coll:"간섭", src_botrail:"botrail studio 녹화", src_mujoco:"MuJoCo 렌더러", src_isaac:"Isaac Sim RTX",
+  p_back:"← 목록", p_3d:"3D 분석", p_loading:"불러오는 중…", p_hint:"드래그 회전 · 휠 줌", p_diff:"편차 표시", p_more:"상세 지표",
+  l_ref:"기준", l_na:"N/A", l_coll:"간섭", l_track:"추종 이탈", s_3dpre:"3D 분석 · ", s_3dpost:" 바디 포즈", d_devmax:"계획 대비 편차 max",
+  dt_track:"추종", dt_isaac:"Isaac Sim (PhysX)", dt_coll:"간섭", dt_torque:"토크 요구치 / 정격", dt_warn:"모델 경고",
+  dt_tcpavg:"TCP 오차 평균", dt_max:"최대", dt_pen:"최대 관입", dt_jointmax:"관절 오차 max", dt_overspeed:"속도 한계 초과", dt_robots:"로봇", dt_robots_suf:"대", dt_mobileincl:"(이동형 포함)",
+  r_botplan:"botrail 기구학 계획 (동역학 미포함)", r_jointerr:"관절 추종오차 max", r_mobile:"베이스 키네마틱 구동", r_noisaac:"Isaac 결과 없음", r_noresult:"결과 없음", CAT:{} });
+Object.assign(I18N.en, { c_norec:"no recording", c_coll:"collisions", src_botrail:"botrail Studio recording", src_mujoco:"MuJoCo renderer", src_isaac:"Isaac Sim RTX",
+  p_back:"← List", p_3d:"3D analysis", p_loading:"Loading…", p_hint:"drag to rotate · scroll to zoom", p_diff:"show deviation", p_more:"details",
+  l_ref:"reference", l_na:"N/A", l_coll:"collision", l_track:"tracking off", s_3dpre:"3D analysis · ", s_3dpost:" body pose", d_devmax:"deviation vs plan max",
+  dt_track:"tracking", dt_isaac:"Isaac Sim (PhysX)", dt_coll:"collisions", dt_torque:"torque demand / rating", dt_warn:"model warnings",
+  dt_tcpavg:"TCP error avg", dt_max:"max", dt_pen:"max penetration", dt_jointmax:"joint error max", dt_overspeed:"speed-limit exceeded", dt_robots:"robots", dt_robots_suf:"", dt_mobileincl:"(incl. mobile)",
+  r_botplan:"botrail kinematic plan (no dynamics)", r_jointerr:"joint tracking error max", r_mobile:"base driven kinematically", r_noisaac:"no Isaac result", r_noresult:"no result",
+  CAT:{"머신 텐딩":"Machine tending","로봇 가공":"Robotic machining","조립":"Assembly","용접 (BIW)":"Welding (BIW)","도장":"Painting","팔레타이징·컨베이어":"Palletizing · conveyor","물류 (AMR·AGV·AGF)":"Logistics (AMR·AGV·AGF)","레그드·휴머노이드":"Legged · humanoid","멀티 로봇":"Multi-robot","그리핑":"Gripping","셀 엔지니어링":"Cell engineering","강화학습":"Reinforcement learning","Export":"Export","기타":"Other"} });
+Object.assign(I18N.ja, { c_norec:"録画なし", c_coll:"干渉", src_botrail:"botrail スタジオ録画", src_mujoco:"MuJoCo レンダラー", src_isaac:"Isaac Sim RTX",
+  p_back:"← 一覧", p_3d:"3D解析", p_loading:"読み込み中…", p_hint:"ドラッグで回転・ホイールでズーム", p_diff:"偏差表示", p_more:"詳細指標",
+  l_ref:"基準", l_na:"N/A", l_coll:"干渉", l_track:"追従逸脱", s_3dpre:"3D解析 · ", s_3dpost:" ボディ姿勢", d_devmax:"計画比 偏差 max",
+  dt_track:"追従", dt_isaac:"Isaac Sim (PhysX)", dt_coll:"干渉", dt_torque:"トルク要求 / 定格", dt_warn:"モデル警告",
+  dt_tcpavg:"TCP誤差 平均", dt_max:"最大", dt_pen:"最大侵入", dt_jointmax:"関節誤差 max", dt_overspeed:"速度限界超過", dt_robots:"ロボット", dt_robots_suf:"台", dt_mobileincl:"(移動型含む)",
+  r_botplan:"botrail 運動学計画（動力学なし）", r_jointerr:"関節追従誤差 max", r_mobile:"ベースは運動学駆動", r_noisaac:"Isaac結果なし", r_noresult:"結果なし",
+  CAT:{"머신 텐딩":"マシンテンディング","로봇 가공":"ロボット加工","조립":"組立","용접 (BIW)":"溶接 (BIW)","도장":"塗装","팔레타이징·컨베이어":"パレタイジング・コンベア","물류 (AMR·AGV·AGF)":"物流 (AMR·AGV·AGF)","레그드·휴머노이드":"脚型・ヒューマノイド","멀티 로봇":"マルチロボット","그리핑":"グリッピング","셀 엔지니어링":"セルエンジニアリング","강화학습":"強化学習","Export":"Export","기타":"その他"} });
+const catName = c => lang === "ko" ? c : ((I18N[lang].CAT || {})[c] || c);
 let lang = "ko";
 try {
   const q = new URLSearchParams(location.search).get("lang");          // ?lang=ja 로 직접 지정 (DM 공유용)
@@ -269,12 +292,14 @@ try {
   lang = (["ko", "en", "ja"].includes(q) ? q : null) || localStorage.getItem("lang") || (["ko", "ja"].includes(nav) ? nav : "en");
 } catch { lang = "en"; }
 const tr = k => (I18N[lang] && I18N[lang][k]) || k;
+const labelTr = l => ({ "PASS": "PASS", "CHECK": "CHECK", "botrail": "botrail", "간섭": tr("l_coll"), "추종 이탈": tr("l_track"), "기준": tr("l_ref"), "N/A": tr("l_na") }[l] || l);
 function renderStats() {
   $("stats").innerHTML = `<span><b>${items.filter(x => x.videos?.botrail).length}</b>${tr("st_cells")}</span>` +
     `<span><b>${ready.length}</b>${tr("st_mj")}</span>` +
     `<span><b>${ready.filter(x => x.level === "good").length}</b>${tr("st_pass")}</span>` +
     `<span><b>${ready.filter(x => x.isaac?.supported).length}</b>${tr("st_isaac")}</span>`;
 }
+let rowsRendered = false;  // 초기 렌더 전엔 재렌더 금지 (card/playable 등 TDZ 회피)
 const ORIG = {}; document.querySelectorAll("[data-i18n]").forEach(el => ORIG[el.dataset.i18n] = el.innerHTML);  // 한국어 원문 보관
 function applyLang(l) {
   lang = l; try { localStorage.setItem("lang", l); } catch {}
@@ -284,6 +309,10 @@ function applyLang(l) {
     el.innerHTML = l === "ko" ? ORIG[k] : ((I18N[l] || {})[k] ?? ORIG[k]);
   });
   renderStats();
+  if (rowsRendered) {  // 언어 전환 시 카드·열린 플레이어 재렌더
+    renderRows();
+    if (cur && !$("player").hidden) { setMode(mode); $("moreBox").innerHTML = cur.ready ? details(cur) : `<div>${esc(cur.reason)}</div>`; }
+  }
   document.querySelectorAll("#langsw button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.lang === l)));
 }
 { const s = document.createElement("style"); s.textContent =
@@ -297,7 +326,7 @@ const mm = v => v >= 100 ? v.toFixed(0) : v.toFixed(1);
 const playable = x => x.ready || !!x.videos?.botrail;
 function card(x) {
   if (!playable(x)) return `<div class="card off" title="${esc(x.reason)}"><div class="thumb">${esc(x.reason)}</div>
-      <div class="body"><h3>${esc(x.title)}</h3><span class="metrics">녹화 없음</span></div></div>`;
+      <div class="body"><h3>${esc(x.title)}</h3><span class="metrics">${tr("c_norec")}</span></div></div>`;
   if (!x.ready) return `<button class="card" data-id="${esc(x.id)}">
       <img class="thumb" src="${esc(x.thumb)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
       <span class="body"><h3>${esc(x.title)}</h3><span class="pill plan">botrail</span>
@@ -307,27 +336,30 @@ function card(x) {
       <img class="thumb" src="${esc(x.thumb)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
       <span class="body">
         <h3>${esc(x.title)}</h3>
-        <span class="pill ${x.level}">${esc(x.label)}</span>
-        <span class="metrics"><span>TCP <b>${mm(d.max_tcp_err_mm)}</b> mm</span><span>간섭 <b>${nc}</b></span>` +
+        <span class="pill ${x.level}">${esc(labelTr(x.label))}</span>
+        <span class="metrics"><span>TCP <b>${mm(d.max_tcp_err_mm)}</b> mm</span><span>${tr("c_coll")} <b>${nc}</b></span>` +
         (x.isaac?.supported ? `<span>Isaac <b>${x.isaac.max_joint_err_deg}</b>°</span>` : "") +
         `<span>CT <b>${x.cycle_s.toFixed(0)}</b> s</span></span>
       </span>
     </button>`;
 }
-$("rows").innerHTML = INDEX.categories.map(c => {
+function renderRows() {
+$("rows").innerHTML = CATS.map(c => {
   const xs = items.filter(x => x.category === c).sort((a, b) => (b.ready - a.ready) || (playable(b) - playable(a)));
   if (!xs.some(playable)) return "";
-  return `<section class="row"><div class="rowhead"><h2>${esc(c)}</h2><span class="n">${xs.length}</span>
-      <span class="nav"><button data-d="-1" aria-label="이전">‹</button><button data-d="1" aria-label="다음">›</button></span></div>
+  return `<section class="row"><div class="rowhead"><h2>${esc(catName(c))}</h2><span class="n">${xs.length}</span>
+      <span class="nav"><button data-d="-1" aria-label="‹">‹</button><button data-d="1" aria-label="›">›</button></span></div>
     <div class="track">${xs.map(card).join("")}</div></section>`;
 }).join("");
 $("rows").querySelectorAll(".row").forEach(row => {
-  const tr = row.querySelector(".track"), [prev, next] = row.querySelectorAll(".nav button");
-  const upd = () => { prev.disabled = tr.scrollLeft < 4; next.disabled = tr.scrollLeft + tr.clientWidth > tr.scrollWidth - 4; };
-  row.querySelectorAll(".nav button").forEach(b => b.onclick = () => tr.scrollBy({left: +b.dataset.d * tr.clientWidth * 0.9, behavior: "smooth"}));
-  tr.addEventListener("scroll", upd, {passive: true}); addEventListener("resize", upd); upd();
+  const trk = row.querySelector(".track"), [prev, next] = row.querySelectorAll(".nav button");
+  const upd = () => { prev.disabled = trk.scrollLeft < 4; next.disabled = trk.scrollLeft + trk.clientWidth > trk.scrollWidth - 4; };
+  row.querySelectorAll(".nav button").forEach(b => b.onclick = () => trk.scrollBy({left: +b.dataset.d * trk.clientWidth * 0.9, behavior: "smooth"}));
+  trk.addEventListener("scroll", upd, {passive: true}); addEventListener("resize", upd); upd();
 });
 $("rows").querySelectorAll("button.card").forEach(b => b.onclick = () => openItem(items.find(x => x.id === b.dataset.id)));
+}
+renderRows(); rowsRendered = true;
 
 // ---------- 플레이어 ----------
 const canvas = $("c");
@@ -460,7 +492,7 @@ function updateDiff(i, a) {
     const dist = Math.hypot(pe[0] - pp[0], pe[1] - pp[1], pe[2] - pp[2]);
     per[b] = dist; if (dist > worst) worst = dist;
   }
-  $("diffNow").textContent = `계획 대비 편차 max ${(worst * 1000).toFixed(1)} mm`;
+  $("diffNow").textContent = `${tr("d_devmax")} ${(worst * 1000).toFixed(1)} mm`;
   colour(on ? per : null);
 }
 function colour(per) {
@@ -510,19 +542,20 @@ function loadVideo(m) {  // 같은 시각에서 이어 보기
 }
 function resultFor(x, m) {
   if (!x.ready) return ["plan", "botrail", x.reason];
-  if (m === "botrail") return ["plan", "기준", "botrail 기구학 계획 (동역학 미포함)"];
+  if (m === "botrail") return ["plan", tr("l_ref"), tr("r_botplan")];
   if (m === "isaac") {
     const is = x.isaac || {};
-    if (!is.supported) return ["check", "N/A", is.reason || "Isaac 결과 없음"];
+    if (!is.supported) return ["check", tr("l_na"), is.reason || tr("r_noisaac")];
     const ok = is.max_joint_err_deg < 1.0, over = is.over_speed || [];
     return [ok ? "good" : "check", ok ? "PASS" : "CHECK",
-      [`관절 추종오차 max ${is.max_joint_err_deg}°`,
-       is.mobile ? "베이스 키네마틱 구동" : "",
-       is.spin_excluded ? `연속회전축 ${is.spin_excluded}개 제외` : "",
-       over.length ? "속도 한계 초과: " + over.slice(0, 3).map(o => `${o.joint} ${o.plan}/${o.limit} ${o.unit}`).join(", ") : ""
+      [`${tr("r_jointerr")} ${is.max_joint_err_deg}°`,
+       is.mobile ? tr("r_mobile") : "",
+       is.spin_excluded ? (lang === "ja" ? `連続回転軸 ${is.spin_excluded}軸除外` : lang === "en" ? `${is.spin_excluded} spin axes excluded` : `연속회전축 ${is.spin_excluded}개 제외`) : "",
+       over.length ? tr("dt_overspeed") + ": " + over.slice(0, 3).map(o => `${o.joint} ${o.plan}/${o.limit} ${o.unit}`).join(", ") : ""
       ].filter(Boolean).join(" · ")];
   }
-  return [x.level, x.label, x.summary];
+  const nc = Object.keys((x.detail || {}).collisions || {}).length;
+  return [x.level, labelTr(x.label), `${tr("dt_tcpavg")} ${x.detail.mean_tcp_err_mm} / ${tr("dt_max")} ${x.detail.max_tcp_err_mm} mm · ${tr("l_coll")} ${nc}`];
 }
 function setMode(m) {
   if (!available(m)) m = ["botrail", "mujoco", "isaac"].find(available) || "botrail";
@@ -532,14 +565,14 @@ function setMode(m) {
   document.querySelectorAll(".engines button").forEach(b => {
     b.setAttribute("aria-pressed", String(!view3d && b.dataset.m === m));  // 3D 분석 중이면 엔진(영상) 버튼은 비활성 표시
     b.disabled = !available(b.dataset.m);
-    b.title = b.disabled ? (b.dataset.m === "isaac" ? (cur?.isaac?.reason || "Isaac 결과 없음") : "결과 없음") : "";
+    b.title = b.disabled ? (b.dataset.m === "isaac" ? (cur?.isaac?.reason || tr("r_noisaac")) : tr("r_noresult")) : "";
   });
   if (cur) {
     const [lv, lb, txt] = resultFor(cur, m);
     $("pPill").className = "pill " + lv; $("pPill").textContent = lb;
     $("pSummary").innerHTML = `<span class="engname">${ENGINE[m]}</span> · ` + esc(txt);
   }
-  $("srcNote").textContent = view3d ? "3D 분석 · " + ENGINE[m] + " 바디 포즈" : SRC[m];
+  $("srcNote").textContent = view3d ? tr("s_3dpre") + ENGINE[m] + tr("s_3dpost") : tr("src_" + m);
   $("legend").hidden = !(view3d && m !== "botrail");
   $("diffBox").hidden = !view3d;
   if (!view3d && changed && cur) { vid.dataset.item = cur.id; loadVideo(m); }
@@ -577,15 +610,15 @@ function setPlaying(p) {
 
 function details(x) {
   const d = x.detail, parts = [];
-  parts.push(`<div><h4>추종</h4><ul><li>TCP 오차 평균 <span class="mono">${d.mean_tcp_err_mm} mm</span> · 최대 <span class="mono">${d.max_tcp_err_mm} mm</span></li>` +
-    `<li>CT <span class="mono">${x.cycle_s.toFixed(1)} s</span> · 로봇 ${x.robots}대${x.mobile ? " (이동형 포함)" : ""} · ${x.fps} fps</li></ul></div>`);
-  if (x.isaac?.supported) parts.push(`<div><h4>Isaac Sim (PhysX)</h4><ul><li>관절 오차 max <span class="mono">${x.isaac.max_joint_err_deg}°</span></li>` +
-    (x.isaac.over_speed || []).map(o => `<li>속도 한계 초과 <span class="mono">${esc(o.joint)} ${o.plan}/${o.limit} ${esc(o.unit)}</span></li>`).join("") + `</ul></div>`);
+  parts.push(`<div><h4>${tr("dt_track")}</h4><ul><li>${tr("dt_tcpavg")} <span class="mono">${d.mean_tcp_err_mm} mm</span> · ${tr("dt_max")} <span class="mono">${d.max_tcp_err_mm} mm</span></li>` +
+    `<li>CT <span class="mono">${x.cycle_s.toFixed(1)} s</span> · ${tr("dt_robots")} ${x.robots}${tr("dt_robots_suf")}${x.mobile ? " " + tr("dt_mobileincl") : ""} · ${x.fps} fps</li></ul></div>`);
+  if (x.isaac?.supported) parts.push(`<div><h4>${tr("dt_isaac")}</h4><ul><li>${tr("dt_jointmax")} <span class="mono">${x.isaac.max_joint_err_deg}°</span></li>` +
+    (x.isaac.over_speed || []).map(o => `<li>${tr("dt_overspeed")} <span class="mono">${esc(o.joint)} ${o.plan}/${o.limit} ${esc(o.unit)}</span></li>`).join("") + `</ul></div>`);
   const coll = Object.entries(d.collisions || {});
-  if (coll.length) parts.push(`<div><h4>간섭</h4><ul>${coll.map(([k, v]) => `<li>${esc(k)} — <span class="mono">${v.max_depth_mm} mm</span> @ ${v.t.slice(0, 3).join(", ")} s</li>`).join("")}</ul></div>`);
+  if (coll.length) parts.push(`<div><h4>${tr("dt_coll")}</h4><ul>${coll.map(([k, v]) => `<li>${esc(k)} — <span class="mono">${v.max_depth_mm} mm</span> @ ${v.t.slice(0, 3).join(", ")} s</li>`).join("")}</ul></div>`);
   const tq = Object.entries(d.torque || {}).flatMap(([r, js]) => Object.entries(js).map(([j, v]) => [r, j, v])).sort((a, b) => b[2].ratio - a[2].ratio).slice(0, 4);
-  if (tq.length) parts.push(`<div><h4>토크 요구치 / 정격</h4><ul>${tq.map(([r, j, v]) => `<li>${esc(r)} ${esc(j)}: <span class="mono">${Math.round(v.ratio * 100)}%</span></li>`).join("")}</ul></div>`);
-  if (d.warnings?.length) parts.push(`<div><h4>모델 경고</h4><ul>${d.warnings.map(w => `<li>${esc(w)}</li>`).join("")}</ul></div>`);
+  if (tq.length) parts.push(`<div><h4>${tr("dt_torque")}</h4><ul>${tq.map(([r, j, v]) => `<li>${esc(r)} ${esc(j)}: <span class="mono">${Math.round(v.ratio * 100)}%</span></li>`).join("")}</ul></div>`);
+  if (d.warnings?.length) parts.push(`<div><h4>${tr("dt_warn")}</h4><ul>${d.warnings.map(w => `<li>${esc(w)}</li>`).join("")}</ul></div>`);
   parts.push(`<div class="mono" style="font-size:12px">${esc(x.example)}</div>`);
   return parts.join("");
 }
@@ -598,7 +631,7 @@ async function openItem(x, push = true) {
   $("player").hidden = false;
   document.body.style.overflow = "hidden";
   if (push) { try { history.pushState({id: x.id}, "", "#" + x.id); pushed = true; } catch {} }
-  $("pTitle").textContent = x.title; $("pCat").textContent = x.category;
+  $("pTitle").textContent = x.title; $("pCat").textContent = catName(x.category);
   cur = x; rec = null; t = 0; setPlaying(false);
   $("moreBox").innerHTML = x.ready ? details(x) : `<div>${esc(x.reason)}</div><div class="mono" style="font-size:12px">${esc(x.example)}</div>`;
   $("more").open = false;
