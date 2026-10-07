@@ -141,8 +141,8 @@ footer code{font-family:var(--mono);font-size:11.5px}
 
 <div class="wrap">
   <header>
-    <h1>로봇 셀 디지털 트윈</h1>
-    <p>botrail 계획 궤적을 MuJoCo · Isaac Sim(PhysX) 동역학으로 재현하고 교차 검증</p>
+    <h1>botrail 셀 → MuJoCo · Isaac 어댑터</h1>
+    <p>botrail 계획 궤적을 두 물리엔진(MuJoCo · Isaac Sim/PhysX)으로 재현 · 교차검증 — botrail 예제 38셀, TCP 추종오차 대부분 1&nbsp;mm 미만. 엔진 버튼으로 같은 셀을 botrail 스튜디오 / MuJoCo / Isaac 화면에서 비교하세요.</p>
     <div class="stats" id="stats"></div>
   </header>
   <section class="exp" aria-label="실험 항목">
@@ -154,7 +154,7 @@ footer code{font-family:var(--mono);font-size:11.5px}
     <div><b>파라미터 실험</b><span>페이로드 · 적분 dt · 토크 한계 on/off (CLI)</span></div>
   </section>
   <main id="rows" style="display:flex;flex-direction:column;gap:26px"></main>
-  <footer>생성: <code>botrail-mujoco</code> · 원본 셀: botrail 0.13 예제 · MuJoCo 1 kHz · PhysX ≈120 Hz</footer>
+  <footer><a href="https://github.com/Dan22dongwon/botrail-mujoco-adapter" target="_blank">코드 (GitHub)</a> · <code>botrail-mujoco</code> (비공식 어댑터) · 셀 설계·계획 궤적은 <b>botrail</b>, 물리 재현·교차검증은 본 어댑터 · 원본 셀: botrail 0.13 예제 · MuJoCo 1 kHz · Isaac Sim/PhysX ≈120 Hz</footer>
 </div>
 
 <section class="player" id="player" hidden aria-label="3D 재생">
@@ -162,12 +162,12 @@ footer code{font-family:var(--mono);font-size:11.5px}
     <button class="back" id="back">← 목록</button>
     <div class="ptitle"><b id="pTitle"></b><span id="pCat"></span></div>
     <div class="seg engines" role="group" aria-label="시뮬레이션 엔진">
-      <button data-m="botrail">botrail</button>
-      <button data-m="mujoco" aria-pressed="true">MuJoCo</button>
+      <button data-m="botrail" aria-pressed="true">botrail</button>
+      <button data-m="mujoco">MuJoCo</button>
       <button data-m="isaac">Isaac Sim</button>
     </div>
     <button class="v3d" id="v3d" aria-pressed="false" title="인터랙티브 3D · 계획 대비 편차 히트맵">3D 분석</button>
-    <button class="propbtn" id="propOpen" title="사이클타임·처리량·ROI 제안서 (링크 공유·PDF)">제안서</button>
+    <button class="propbtn" id="propOpen" title="사이클타임·처리량·ROI 제안서 (링크 공유·PDF)" hidden>제안서</button>
   </div>
   <div class="stage" id="stage">
     <canvas id="c" hidden></canvas>
@@ -279,8 +279,12 @@ camera.up.set(0, 0, 1);
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
 let scene = null, rec = null, t = 0, playing = false, speed = 1, last = performance.now(), loadToken = 0;
-let mode = "mujoco";
-try { mode = localStorage.getItem("engine") || "mujoco"; } catch {}
+let mode = "botrail";
+try { mode = localStorage.getItem("engine") || "botrail"; } catch {}
+{ const qe = new URLSearchParams(location.search).get("eng"); if (["botrail","mujoco","isaac"].includes(qe)) mode = qe; }  // ?eng=mujoco (live_engines)
+if (new URLSearchParams(location.search).get("embed")) {  // ?embed=1 → 상단 바 숨김 (live_engines iframe 용)
+  const s = document.createElement("style"); s.textContent = ".ptop{display:none!important}"; document.head.appendChild(s);
+}
 const ENGINE = {botrail: "botrail", mujoco: "MuJoCo", isaac: "Isaac Sim"};
 
 function stageColor() { return new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue("--stage").trim() || "#e4e8ec"); }
@@ -461,7 +465,7 @@ function resultFor(x, m) {
   return [x.level, x.label, x.summary];
 }
 function setMode(m) {
-  if (!available(m)) m = ["mujoco", "botrail", "isaac"].find(available) || "botrail";
+  if (!available(m)) m = ["botrail", "mujoco", "isaac"].find(available) || "botrail";
   const changed = m !== mode || vid.dataset.item !== cur?.id;
   mode = m;
   try { localStorage.setItem("engine", m); } catch {}
@@ -541,7 +545,8 @@ async function openItem(x, push = true) {
   $("v3d").disabled = !x.ready;
   $("loading").hidden = true;
   const hasVideo = !!(x.videos && Object.keys(x.videos).length);
-  await set3D(!hasVideo);  // 기본: 엔진 자체 렌더 영상. 영상이 없으면 3D 분석
+  const force3d = new URLSearchParams(location.search).get("3d");  // ?3d=1 → 3D 분석으로 바로 (live_engines MuJoCo 뷰)
+  await set3D(force3d ? true : !hasVideo);  // 기본: 엔진 자체 렌더 영상. 영상 없으면/강제면 3D 분석
   resize();
   setTimeout(() => cur === x && setPlaying(true), 300);
 }
