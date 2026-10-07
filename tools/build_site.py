@@ -154,13 +154,16 @@ def shrink(src_json, src_bin, dst_json, dst_bin, fps, max_mb, cell_mm=3.0):
     pos = np.frombuffer(buf, np.float32, meta["pos"][1], meta["pos"][0]).reshape(len(t), nb * 3)
     quat = np.frombuffer(buf, np.float32, meta["quat"][1], meta["quat"][0]).reshape(len(t), nb * 4)
     src_fps = (len(t) - 1) / max(t[-1], 1e-9)
-    mesh_bytes = sum(m["v"][1] * 4 + m["f"][1] * 4 for m in meta["meshes"].values()) * 0.4  # 단순화 후 대략
+    mesh_bytes = sum(m["v"][1] * 4 + m["f"][1] * 4 for m in meta["meshes"].values()) * 0.9  # 단순화가 잘 안 되는 메쉬(차체 패널) 대비 보수적으로
+    # 포즈 데이터는 트랙마다 바디 수가 다르다 (plan/isaac 에 차체 패널이 더 많을 수 있음) — 실제 합으로 추정
+    track_nb = nb + sum(len(json.loads(tj.read_text()).get("moving", []))
+                        for tj in (src_json.with_name("plan.json"), src_json.with_name("isaac.json")) if tj.exists())
     while True:
         step = max(1, int(round(src_fps / fps)))
         idx = np.arange(0, len(t), step)
         if idx[-1] != len(t) - 1:
             idx = np.append(idx, len(t) - 1)
-        size = mesh_bytes + len(idx) * nb * 7 * 4 * 3  # MuJoCo + botrail 계획 + Isaac
+        size = mesh_bytes + len(idx) * track_nb * 7 * 4  # MuJoCo + botrail 계획 + Isaac (실제 바디 수 합)
         if size <= max_mb * 1e6 or fps <= 2:
             break
         fps /= 2
@@ -219,7 +222,7 @@ def main():
     ap.add_argument("survey")
     ap.add_argument("site")
     ap.add_argument("--fps", type=float, default=10)
-    ap.add_argument("--max-mb", type=float, default=14)
+    ap.add_argument("--max-mb", type=float, default=8)  # 무거운 멀티로봇 셀(차체 패널 다수)은 자동 fps↓ (브라우저 3D 과부하 방지)
     ap.add_argument("--cell-mm", type=float, default=3.0, help="메쉬 단순화 격자 (0 이면 원본)")
     a = ap.parse_args()
     survey, site = Path(a.survey), Path(a.site)
