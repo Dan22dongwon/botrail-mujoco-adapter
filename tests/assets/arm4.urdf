@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<!-- 테스트용 4축 팔 (botrail getting-started 의 arm.urdf 와 같은 구성, 이 저장소에서 새로 작성) -->
+<robot name="arm4">
+  <link name="base"><inertial><mass value="4"/><inertia ixx="0.02" iyy="0.02" izz="0.02" ixy="0" ixz="0" iyz="0"/></inertial>
+    <visual><geometry><cylinder radius="0.08" length="0.1"/></geometry></visual>
+    <collision><geometry><cylinder radius="0.08" length="0.1"/></geometry></collision></link>
+  <link name="l1"><inertial><origin xyz="0 0 0.15"/><mass value="2"/><inertia ixx="0.02" iyy="0.02" izz="0.005" ixy="0" ixz="0" iyz="0"/></inertial>
+    <visual><origin xyz="0 0 0.15"/><geometry><box size="0.08 0.08 0.3"/></geometry></visual>
+    <collision><origin xyz="0 0 0.15"/><geometry><box size="0.08 0.08 0.3"/></geometry></collision></link>
+  <link name="l2"><inertial><origin xyz="0 0 0.15"/><mass value="1.5"/><inertia ixx="0.015" iyy="0.015" izz="0.004" ixy="0" ixz="0" iyz="0"/></inertial>
+    <visual><origin xyz="0 0 0.15"/><geometry><box size="0.07 0.07 0.3"/></geometry></visual>
+    <collision><origin xyz="0 0 0.15"/><geometry><box size="0.07 0.07 0.3"/></geometry></collision></link>
+  <link name="l3"><inertial><origin xyz="0 0 0.12"/><mass value="1"/><inertia ixx="0.008" iyy="0.008" izz="0.002" ixy="0" ixz="0" iyz="0"/></inertial>
+    <visual><origin xyz="0 0 0.12"/><geometry><box size="0.06 0.06 0.24"/></geometry></visual>
+    <collision><origin xyz="0 0 0.12"/><geometry><box size="0.06 0.06 0.24"/></geometry></collision></link>
+  <link name="l4"><inertial><origin xyz="0 0 0.04"/><mass value="0.4"/><inertia ixx="0.001" iyy="0.001" izz="0.001" ixy="0" ixz="0" iyz="0"/></inertial>
+    <visual><origin xyz="0 0 0.04"/><geometry><box size="0.05 0.05 0.08"/></geometry></visual>
+    <collision><origin xyz="0 0 0.04"/><geometry><box size="0.05 0.05 0.08"/></geometry></collision></link>
+  <link name="tool"/>
+  <joint name="j1" type="revolute"><parent link="base"/><child link="l1"/><origin xyz="0 0 0.05"/><axis xyz="0 0 1"/>
+    <limit lower="-3.1" upper="3.1" effort="150" velocity="2"/></joint>
+  <joint name="j2" type="revolute"><parent link="l1"/><child link="l2"/><origin xyz="0 0 0.3"/><axis xyz="0 1 0"/>
+    <limit lower="-2" upper="2" effort="150" velocity="2"/></joint>
+  <joint name="j3" type="revolute"><parent link="l2"/><child link="l3"/><origin xyz="0 0 0.3"/><axis xyz="0 1 0"/>
+    <limit lower="-2.5" upper="2.5" effort="80" velocity="2.5"/></joint>
+  <joint name="j4" type="revolute"><parent link="l3"/><child link="l4"/><origin xyz="0 0 0.24"/><axis xyz="0 1 0"/>
+    <limit lower="-2.5" upper="2.5" effort="30" velocity="3"/></joint>
+  <joint name="jt" type="fixed"><parent link="l4"/><child link="tool"/><origin xyz="0 0 0.1"/></joint>
+</robot>

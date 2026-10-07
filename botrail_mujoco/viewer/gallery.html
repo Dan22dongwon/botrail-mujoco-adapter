@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>botrail MuJoCo 갤러리</title>
+<style>
+:root{--bg:#f4f4f2;--panel:#fcfcfb;--border:#dddcd6;--text:#0b0b0b;--text2:#52514e;--muted:#8a8984;--accent:#2a78d6;
+  --good:#008300;--warn:#b07400;--bad:#c23b3b;--sel:#e7effa}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#111110;--panel:#1a1a19;--border:#33332f;--text:#fff;
+  --text2:#c3c2b7;--muted:#8a8984;--accent:#3987e5;--good:#3fae3f;--warn:#e0a020;--bad:#e66767;--sel:#1f2a3a}}
+:root[data-theme="dark"]{--bg:#111110;--panel:#1a1a19;--border:#33332f;--text:#fff;--text2:#c3c2b7;--muted:#8a8984;
+  --accent:#3987e5;--good:#3fae3f;--warn:#e0a020;--bad:#e66767;--sel:#1f2a3a}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:13px/1.45 system-ui,"Noto Sans KR",sans-serif}
+.app{display:grid;grid-template-columns:340px 1fr;height:100vh}
+aside{background:var(--panel);border-right:1px solid var(--border);overflow-y:auto;display:flex;flex-direction:column}
+header{padding:12px 14px 8px;border-bottom:1px solid var(--border)}
+h1{font-size:16px;margin:0}
+header p{margin:2px 0 0;color:var(--text2);font-size:12px}
+.sum{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.sum span{border:1px solid var(--border);border-radius:999px;padding:1px 8px;font-size:12px;color:var(--text2)}
+.filter{padding:8px 14px;border-bottom:1px solid var(--border);display:flex;gap:6px}
+.filter input{flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font:inherit}
+.filter label{display:flex;align-items:center;gap:4px;color:var(--text2);font-size:12px;white-space:nowrap}
+.group{padding:8px 14px 2px;color:var(--muted);font-size:11px;letter-spacing:.04em;text-transform:uppercase}
+.item{padding:7px 14px;border-left:3px solid transparent;cursor:pointer}
+.item:hover{background:var(--sel)}
+.item.on{background:var(--sel);border-left-color:var(--accent)}
+.item.off{cursor:default;opacity:.75}
+.item.off:hover{background:none}
+.item b{font-weight:600;display:block}
+.item .cat{color:var(--muted);font-weight:400}
+.item small{color:var(--text2);display:block}
+.item small.meta{color:var(--muted);font-variant-numeric:tabular-nums}
+.badge{font-size:11px;font-weight:600}
+.pass{color:var(--good)}.diff{color:var(--warn)}.no{color:var(--muted)}
+main{position:relative;display:flex;flex-direction:column;min-width:0}
+.bar{padding:8px 14px;border-bottom:1px solid var(--border);background:var(--panel);display:flex;gap:14px;align-items:baseline;flex-wrap:wrap}
+.bar b{font-size:14px}
+.bar span{color:var(--text2);font-variant-numeric:tabular-nums}
+.bar a{color:var(--accent);margin-left:auto;text-decoration:none}
+iframe{flex:1;border:0;width:100%;background:#dcdcd9}
+.empty{flex:1;display:grid;place-items:center;color:var(--muted)}
+.notes{max-height:28vh;overflow:auto;border-top:1px solid var(--border);background:var(--panel);padding:8px 14px;font-size:12px;color:var(--text2)}
+.notes h3{margin:4px 0;font-size:12px;color:var(--text)}
+.notes ul{margin:0 0 6px;padding-left:18px}
+#menu{display:none}
+@media (max-width:820px){
+  .app{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+  aside{max-height:42vh;border-right:0;border-bottom:1px solid var(--border)}
+  .app.collapsed aside{max-height:48px;overflow:hidden}
+  #menu{display:inline-block;margin-left:auto;font:inherit;padding:2px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)}
+  header{display:flex;flex-wrap:wrap;align-items:center}
+  header p,.sum{width:100%}
+}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <aside>
+    <header><h1>botrail → MuJoCo 갤러리</h1><button id="menu">목록</button>
+      <p>botrail 예제를 수정 없이 MuJoCo로 변환·실행한 결과를 공정 분야별로 정리. 항목을 고르면 MuJoCo가 계산한 동작을 3D로 재생합니다.</p>
+      <div class="sum" id="sum"></div></header>
+    <div class="filter"><input id="q" placeholder="예제 검색"><label><input type="checkbox" id="all">미지원 포함</label></div>
+    <div id="list"></div>
+  </aside>
+  <main>
+    <div class="bar" id="bar"><b>예제를 고르세요</b></div>
+    <div class="empty" id="empty">왼쪽 목록에서 변환된 예제를 선택</div>
+    <iframe id="view" title="MuJoCo 3D" style="display:none"></iframe>
+    <div class="notes" id="notes" style="display:none"></div>
+  </main>
+</div>
+<script>
+const STATUS = {
+  "ok": ["통과", "pass"], "ok-collision": ["판정 차이", "diff"], "ok-tracking": ["추종 실패", "diff"],
+  "unsupported": ["미지원", "no"], "no-sequence": ["시퀀스 없음", "no"], "external-control": ["외부 정책 필요", "no"],
+  "error": ["오류", "no"], "timeout": ["시간 초과", "no"], "missing-dep": ["의존성 없음", "no"], "botrail-plan": ["botrail 계획 실패", "no"],
+};
+const ORDER = ["ok", "ok-collision", "ok-tracking", "unsupported", "external-control", "no-sequence", "error", "timeout", "missing-dep", "botrail-plan"];
+
+// 공정 분야별 정렬 (예제 경로 → 분야, 한 줄 설명)
+const CATS = [
+  ["머신텐딩", ["machining/machine_tending_demo", "machining/two_machine_cell_demo"]],
+  ["로봇 가공", ["machining/machining_demo", "machining/ati_deburring_demo", "machining/spindle_mounting_demo"]],
+  ["조립", ["assembly/cover_bolting_demo", "assembly/shuttle_line_demo"]],
+  ["용접", ["welding/weld_station_demo", "welding/weld_line_demo", "welding/line_balance_sweep", "welding/nimak_spot_welding_demo", "welding/spot_gun_mounting_demo"]],
+  ["도장", ["painting/painting_demo", "painting/painting_hood_demo"]],
+  ["팔레타이징·컨베이어", ["palletizing/palletizing_line_demo", "basics/sequence_demo", "basics/physics_conveyor"]],
+  ["물류·이동 로봇", ["vehicles/warehouse_demo", "vehicles/agv_cell_demo", "vehicles/agv_sweep_demo", "vehicles/forklift_demo", "vehicles/lift_demo", "vehicles/amr_demo", "vehicles/semi_humanoid_demo", "drone/drone_survey_demo"]],
+  ["보행·휴머노이드", ["legged/legged_patrol_demo", "legged/stairs_delivery_demo", "legged/building_delivery_demo", "legged/humanoid_carry_demo", "legged/wash_inspect_ship_demo"]],
+  ["다중 로봇", ["multi_robot/dual_arm_demo", "multi_robot/dual_cell_demo"]],
+  ["파지·물리 기본", ["basics/gripper_pick_demo", "basics/friction_grasp_demo", "basics/hand_grasp_demo", "basics/physics_pick_place", "basics/physics_drop", "basics/physics_world_demo"]],
+  ["셀 설계·엔지니어링", ["basics/demo", "basics/sfc_chart_demo", "basics/sweep_demo", "engineering/cell_deliverables_demo", "engineering/equipment_cell_demo", "engineering/urplus_products"]],
+  ["강화학습", ["rl/reach_control_demo", "rl/reach_env", "rl/tabletop_env", "rl/torque_env", "rl/depth_pick_env", "rl/policy_cell_demo"]],
+  ["내보내기", ["export/export_urscript", "export/export_animation", "export/isaaclab_cell", "export/isaaclab_tabletop", "export/play_record"]],
+];
+const DESC = {
+  "machining/machine_tending_demo": "협동로봇이 머시닝센터 도어·바이스·버튼을 다루며 공작물 교체",
+  "machining/two_machine_cell_demo": "로봇 1대가 머시닝센터 2대 담당",
+  "machining/machining_demo": "스핀들 로봇의 5축 모서리 가공",
+  "machining/ati_deburring_demo": "컴플라이언트 스핀들 알루미늄 디버링",
+  "machining/spindle_mounting_demo": "스핀들 장착 구성 확인",
+  "assembly/cover_bolting_demo": "기어박스 커버 끼우고 나사 체결",
+  "assembly/shuttle_line_demo": "리니어모터 셔틀 루프 소형 부품 조립 라인",
+  "welding/weld_station_demo": "로봇 4대 차체 스폿 용접 스테이션",
+  "welding/weld_line_demo": "2개 스테이션 차체 용접 라인",
+  "welding/line_balance_sweep": "용접점 배분 바꿔 가며 택트 비교",
+  "welding/nimak_spot_welding_demo": "BX250L + 스폿건 2점 용접",
+  "welding/spot_gun_mounting_demo": "용접건 장착 구성 확인",
+  "painting/painting_demo": "회전 벨 패널 도장과 도막 두께",
+  "painting/painting_hood_demo": "곡면 후드 도장 경로 검증",
+  "palletizing/palletizing_line_demo": "라인 끝 팔레타이징: 로봇 2대·래퍼·턴테이블",
+  "basics/sequence_demo": "움직이는 컨베이어 상자 트래킹 픽업",
+  "basics/physics_conveyor": "마찰 컨베이어·스토퍼 대기열 (로봇 없음)",
+  "vehicles/warehouse_demo": "40 m 물류창고 AMR 반송 흐름 3개",
+  "vehicles/agv_cell_demo": "AGV 호출→게이트→도킹→출발 인터록",
+  "vehicles/agv_sweep_demo": "AGV 도착 지연·도킹 깊이 스윕",
+  "vehicles/forklift_demo": "자동 지게차 랙 입출고",
+  "vehicles/lift_demo": "AMR이 엘리베이터로 층간 이동",
+  "vehicles/amr_demo": "AMR+팔+그리퍼 모바일 매니퓰레이터",
+  "vehicles/semi_humanoid_demo": "바퀴형 상체 휴머노이드 선반 작업",
+  "drone/drone_survey_demo": "재고 조사 드론 + 케이스 팔레타이저",
+  "legged/legged_patrol_demo": "4족 로봇 셀 순찰",
+  "legged/stairs_delivery_demo": "4족 로봇 계단 운반",
+  "legged/building_delivery_demo": "4족 로봇 6층 건물 계단 배송",
+  "legged/humanoid_carry_demo": "휴머노이드 부품 운반",
+  "legged/wash_inspect_ship_demo": "휴머노이드 세척·검사·출하 라인",
+  "multi_robot/dual_arm_demo": "양팔 로봇 키팅",
+  "multi_robot/dual_cell_demo": "Franka 2대 공유 투입구 인터록",
+  "basics/gripper_pick_demo": "그리퍼 물리 파지 픽앤플레이스",
+  "basics/friction_grasp_demo": "마찰 파지",
+  "basics/hand_grasp_demo": "다지 핸드로 캔 쥐기",
+  "basics/physics_pick_place": "물리 놓기 픽앤플레이스",
+  "basics/physics_drop": "부품 낙하·적재 (로봇 없음)",
+  "basics/physics_world_demo": "셀 전체 중력 물리",
+  "basics/demo": "Franka 자세·경로 계획",
+  "basics/sfc_chart_demo": "UR5e 집기 셀 SFC 차트",
+  "basics/sweep_demo": "파라미터 스윕 사이클타임",
+  "engineering/cell_deliverables_demo": "도면·BOM·I/O·로봇 프로그램 일괄 생성",
+  "engineering/equipment_cell_demo": "펜스·컨베이어·랙 카탈로그 구성",
+  "engineering/urplus_products": "UR+ 제품 장착 검토",
+  "rl/reach_control_demo": "직접 짠 제어기로 실시간 롤아웃",
+  "rl/reach_env": "목표점 도달 강화학습 환경",
+  "rl/tabletop_env": "테이블탑 셀 격자",
+  "rl/torque_env": "동역학 로봇 토크 제어",
+  "rl/depth_pick_env": "손목 카메라 영상 기반 집기",
+  "rl/policy_cell_demo": "학습 정책을 셀의 한 스텝으로",
+  "export/export_urscript": "시퀀스 → URScript 로봇 프로그램",
+  "export/export_animation": "USD 애니메이션 출력",
+  "export/isaaclab_cell": "Isaac Lab 물리 스테이지 출력",
+  "export/isaaclab_tabletop": "테이블탑 셀 Isaac Lab 출력",
+  "export/play_record": "USD 녹화 재생",
+};
+const keyOf = ex => ex.replace(/\.py$/, "");
+const catOf = ex => (CATS.find(([, xs]) => xs.includes(keyOf(ex))) || ["기타"])[0];
+const dirOf = ex => ex.replace("/", "__").replace(/\.py$/, "");
+let rows = [], cur = null;
+
+async function load() {
+  rows = await fetch("data/survey.json").then(r => r.json());
+  // 재분석 결과가 있으면 덮어쓰기
+  try { const fix = await fetch("data/fix/survey.json").then(r => r.ok ? r.json() : []);
+        for (const f of fix) { const i = rows.findIndex(r => r.example === f.example); if (i >= 0) rows[i] = {...f, fixed: true}; } } catch {}
+  const c = {}; rows.forEach(r => c[r.status] = (c[r.status] || 0) + 1);
+  const conv = (c.ok || 0) + (c["ok-collision"] || 0) + (c["ok-tracking"] || 0);
+  document.getElementById("sum").innerHTML = `<span><b>${conv}</b> / ${rows.length} 변환</span>` +
+    ORDER.filter(k => c[k]).map(k => `<span>${STATUS[k][0]} ${c[k]}</span>`).join("");
+  render();
+  const want = decodeURIComponent(location.hash.slice(1));
+  const first = rows.find(r => r.example === want) || rows.find(r => r.status === "ok");
+  if (first) open(first);
+}
+
+function render() {
+  const q = document.getElementById("q").value.toLowerCase(), all = document.getElementById("all").checked;
+  const list = document.getElementById("list");
+  list.innerHTML = "";
+  const groups = [...CATS.map(c => c[0]), "기타"];
+  for (const cat of groups) {
+    const rs = rows.filter(r => catOf(r.example) === cat &&
+      (r.example.toLowerCase().includes(q) || (DESC[keyOf(r.example)] || "").includes(q)) &&
+      (all || r.status.startsWith("ok")))
+      .sort((a, b) => ORDER.indexOf(a.status) - ORDER.indexOf(b.status) || a.example.localeCompare(b.example));
+    if (!rs.length) continue;
+    const nConv = rows.filter(r => catOf(r.example) === cat && r.status.startsWith("ok")).length;
+    const nAll = rows.filter(r => catOf(r.example) === cat).length;
+    list.insertAdjacentHTML("beforeend", `<div class="group">${cat} · ${nConv}/${nAll}</div>`);
+    for (const r of rs) {
+      const st = r.status, conv = st.startsWith("ok");
+      const name = r.example.split("/")[1].replace(/\.py$/, "");
+      const el = document.createElement("div");
+      el.className = "item" + (conv ? "" : " off") + (cur === r ? " on" : "");
+      const meta = conv ? `${r.cycle_s?.toFixed(1)} s · TCP 오차 ${r.max_tcp_err_mm?.toFixed(2)} mm` +
+        (r.robots > 1 ? ` · 로봇 ${r.robots}` : "") : r.detail;
+      el.innerHTML = `<b>${name} <span class="badge ${STATUS[st]?.[1] || "no"}">${STATUS[st]?.[0] || st}</span></b>` +
+        `<small>${DESC[keyOf(r.example)] || ""}</small><small class="meta">${meta}</small>`;
+      if (conv) el.onclick = () => open(r);
+      list.appendChild(el);
+    }
+  }
+}
+
+async function open(r) {
+  cur = r;
+  render();
+  history.replaceState(null, "", "#" + encodeURIComponent(r.example));
+  const d = `data/${r.fixed ? "fix/" : ""}${dirOf(r.example)}/mj`;
+  document.getElementById("empty").style.display = "none";
+  const v = document.getElementById("view");
+  v.style.display = "";
+  v.src = `index.html?v=3&data=${encodeURIComponent(d + "/web")}`;
+  document.getElementById("bar").innerHTML = `<b>${r.example}</b><span>${catOf(r.example)} · ${DESC[keyOf(r.example)] || ""}</span><span>사이클 ${r.cycle_s?.toFixed(2)} s</span>` +
+    `<span>TCP 오차 최대 ${r.max_tcp_err_mm?.toFixed(2)} mm</span><span class="badge ${STATUS[r.status][1]}">${STATUS[r.status][0]}</span>` +
+    `<a href="${d}/report.json" target="_blank">report.json ↗</a>`;
+  document.getElementById("app").classList.add("collapsed");
+  const notes = document.getElementById("notes");
+  try {
+    const rep = await fetch(d + "/report.json").then(x => x.json());
+    const sec = (title, obj) => {
+      const ks = Object.entries(obj || {});
+      return ks.length ? `<h3>${title} (${ks.length})</h3><ul>` + ks.slice(0, 8).map(([k, v]) =>
+        `<li>${k.replace(/^[a-z_()]+: /, "")} — ${v.max_depth_mm} mm @ ${v.t.slice(0, 3).join(", ")} s</li>`).join("") + "</ul>" : "";
+    };
+    const torque = Object.entries(rep.robots || {}).map(([n, x]) => {
+      const t = Object.entries(x.required_torque || {}).filter(([, v]) => v.ratio != null).sort((a, b) => b[1].ratio - a[1].ratio)[0];
+      return t ? `${n}: ${t[0]} ${t[1].peak} N·m (${Math.round(t[1].ratio * 100)}%)` : null;
+    }).filter(Boolean);
+    notes.innerHTML = (rep.warnings?.length ? `<h3>경고</h3><ul>${rep.warnings.map(w => `<li>${w}</li>`).join("")}</ul>` : "") +
+      (torque.length ? `<h3>필요 토크 최대 (한계 대비)</h3><ul>${torque.map(t => `<li>${t}</li>`).join("")}</ul>` : "") +
+      sec("충돌", rep.collisions) + sec("허용 접촉", rep.allowed_contacts) + sec("공정 램프 중 접촉", rep.process_ramp_contacts) +
+      sec("초기 겹침 (모델 경고)", rep.initial_overlaps) + sec("파지 전후 접촉", rep.pregrasp_contacts);
+    notes.style.display = notes.innerHTML ? "" : "none";
+  } catch { notes.style.display = "none"; }
+}
+
+document.getElementById("q").oninput = render;
+document.getElementById("all").onchange = render;
+document.getElementById("menu").onclick = () => document.getElementById("app").classList.toggle("collapsed");
+load();
+</script>
+</body>
+</html>

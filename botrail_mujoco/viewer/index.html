@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MuJoCo 3D 재생</title>
+<style>
+:root{--bg:#dcdcd9;--panel:#0f1115e0;--text:#f2f2f0;--text2:#b9b8b0;--accent:#eb6834}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);overflow:hidden;font:13px/1.4 system-ui,"Noto Sans KR",sans-serif}
+#c{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+#bar{position:absolute;left:8px;right:8px;bottom:8px;background:var(--panel);color:var(--text);border-radius:8px;
+  padding:6px 10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+#bar button{background:#2a2c33;color:var(--text);border:1px solid #3a3d45;border-radius:6px;padding:4px 10px;cursor:pointer;font:inherit}
+#bar input[type=range]{flex:1;min-width:120px;accent-color:var(--accent)}
+#bar .v{font-variant-numeric:tabular-nums;color:var(--text2);white-space:nowrap}
+#bar label{color:var(--text2);display:flex;gap:4px;align-items:center;white-space:nowrap}
+#bar{transition:opacity .3s}
+body.hidebar #bar{opacity:0;pointer-events:none}
+/* simple=1: 누구나 쓰는 모드 — 큰 재생 버튼과 시간 바만 */
+body.simple #eye,body.simple #err,body.simple #step,body.simple #sync,body.simple label{display:none !important}
+body.simple #bar{padding:10px 14px;gap:14px}
+body.simple #bar button{font-size:16px;padding:6px 16px;border-radius:999px}
+body.simple #bar input[type=range]{height:6px}
+body.simple #bar .v{font-size:14px}
+/* thumb=1: 썸네일 촬영용 — 컨트롤 전부 숨김 */
+body.thumb #bar,body.thumb #eye{display:none !important}
+#eye{position:absolute;top:8px;left:8px;background:#0f1115b0;color:#f2f2f0;border:1px solid #3a3d45;border-radius:6px;padding:3px 8px;cursor:pointer;font:12px system-ui,sans-serif;opacity:.6}
+#eye:hover{opacity:1}
+#load{position:absolute;inset:0;display:grid;place-items:center;color:#333;font-size:14px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<button id="eye" title="컨트롤 바 숨기기/보이기 (H)">👁 바 숨기기</button>
+<div id="load">MuJoCo 결과 불러오는 중…</div>
+<div id="bar">
+  <button id="play">▶</button>
+  <button id="spd">1×</button>
+  <input id="seek" type="range" min="0" max="1000" value="0">
+  <span class="v" id="tl">0.0 s</span>
+  <span class="v" id="err">TCP 오차 – mm</span>
+  <span class="v" id="step"></span>
+  <label title="부모 페이지(Isaac 영상)와 시간 동기"><input type="checkbox" id="sync" checked>동기</label>
+</div>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+ "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+</script>
+<script type="module">
+import * as THREE from "three";
+import {OrbitControls} from "three/addons/controls/OrbitControls.js";
+
+// ?data=/out/mj_tending/web  (botrail_mujoco 어댑터 결과) — 기본은 머신텐딩 단독 스크립트 결과
+const QS = new URLSearchParams(location.search);
+const base = QS.get("data") || "data/web";  // botrail-mujoco view <out> 가 <out> 을 /data/ 로 제공
+const [meta, bin] = await Promise.all([
+  fetch(base + ".json").then(r => r.json()),
+  fetch(base + ".bin").then(r => r.arrayBuffer()),
+]);
+document.getElementById("load").remove();
+const f32 = ([o, n]) => new Float32Array(bin, o, n), u32 = ([o, n]) => new Uint32Array(bin, o, n);
+
+const canvas = document.getElementById("c");
+const renderer = new THREE.WebGLRenderer({canvas, antialias: true});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xdcdcd9);
+const camera = new THREE.PerspectiveCamera(36, 1, 0.02, 100);
+camera.up.set(0, 0, 1);
+camera.position.set(2.9, -3.4, 2.6);
+const controls = new OrbitControls(camera, canvas);
+controls.target.set(0.2, 0.2, 1.0);
+controls.enableDamping = true;
+controls.update();
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a85, 1.6));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.position.set(2, -3, 6);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, {left: -4, right: 4, top: 4, bottom: -4, near: 0.5, far: 20});
+scene.add(sun);
+const grid = new THREE.GridHelper(12, 48, 0xa8a8a4, 0xc4c4c0);
+grid.rotation.x = Math.PI / 2;
+scene.add(grid);
+
+// ---- geoms grouped per MuJoCo body
+const bodyObj = {};
+const body = b => bodyObj[b] ??= (() => { const g = new THREE.Group(); scene.add(g); return g; })();
+const meshGeo = {};
+for (const [k, m] of Object.entries(meta.meshes)) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(f32(m.v), 3));
+  g.setIndex(new THREE.BufferAttribute(u32(m.f), 1));
+  g.computeVertexNormals();
+  meshGeo[k] = g;
+}
+const zToY = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
+for (const g of meta.geoms) {
+  let geo;
+  const s = g.size;
+  switch (g.type) {
+    case 0: continue; // plane → grid
+    case 2: geo = new THREE.SphereGeometry(s[0], 24, 16); break;
+    case 3: geo = new THREE.CapsuleGeometry(s[0], 2 * s[1], 8, 16); break;
+    case 5: geo = new THREE.CylinderGeometry(s[0], s[0], 2 * s[1], 32); break;
+    case 6: geo = new THREE.BoxGeometry(2 * s[0], 2 * s[1], 2 * s[2]); break;
+    case 7: geo = meshGeo[g.mesh]; break;
+    default: continue;
+  }
+  const [r, gg, b, a] = g.rgba;
+  const mat = new THREE.MeshStandardMaterial({color: new THREE.Color(r, gg, b), roughness: 0.55, metalness: 0.05,
+    transparent: a < 1, opacity: a});
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.castShadow = mesh.receiveShadow = true;
+  mesh.position.fromArray(g.pos);
+  const q = new THREE.Quaternion(g.quat[1], g.quat[2], g.quat[3], g.quat[0]);
+  if (g.type === 3 || g.type === 5) q.multiply(zToY); // three 의 원기둥은 Y축, MuJoCo 는 Z축
+  mesh.quaternion.copy(q);
+  body(g.b).add(mesh);
+}
+for (const [b, s] of Object.entries(meta.static)) {
+  body(b).position.fromArray(s.p);
+  body(b).quaternion.set(s.q[1], s.q[2], s.q[3], s.q[0]);
+}
+
+// ---- playback (MuJoCo 가 계산한 포즈를 보간)
+const T = meta.t, N = T.length, nb = meta.moving.length;
+const P = f32(meta.pos), Q = f32(meta.quat);
+const qa = new THREE.Quaternion(), qb = new THREE.Quaternion();
+function pose(t) {
+  let i = Math.max(0, Math.min(N - 2, Math.floor(t / (T[N - 1] / (N - 1)))));
+  while (i < N - 2 && T[i + 1] < t) i++;
+  while (i > 0 && T[i] > t) i--;
+  const a = Math.max(0, Math.min(1, (t - T[i]) / (T[i + 1] - T[i])));
+  meta.moving.forEach((b, k) => {
+    const o = bodyObj[b]; if (!o) return;
+    const p0 = (i * nb + k) * 3, p1 = ((i + 1) * nb + k) * 3, q0 = (i * nb + k) * 4, q1 = ((i + 1) * nb + k) * 4;
+    o.position.set(P[p0] + a * (P[p1] - P[p0]), P[p0 + 1] + a * (P[p1 + 1] - P[p0 + 1]), P[p0 + 2] + a * (P[p1 + 2] - P[p0 + 2]));
+    qa.set(Q[q0 + 1], Q[q0 + 2], Q[q0 + 3], Q[q0]); qb.set(Q[q1 + 1], Q[q1 + 2], Q[q1 + 3], Q[q1]);
+    o.quaternion.slerpQuaternions(qa, qb, a);
+  });
+  const inS = ([, s0, s1]) => t >= s0 && t < s1;
+  const st = meta.steps.find(s => s[0].startsWith("tend/") && inS(s)) || meta.steps.find(inS);
+  document.getElementById("tl").textContent = `${t.toFixed(1)} / ${T[N - 1].toFixed(1)} s`;
+  document.getElementById("err").textContent = `TCP 오차 ${meta.tcp_mm[a < 0.5 ? i : i + 1].toFixed(2)} mm`;
+  document.getElementById("step").textContent = st ? st[0] : "";
+  seek.value = Math.round(t / T[N - 1] * 1000);
+}
+
+const seek = document.getElementById("seek"), playBtn = document.getElementById("play"), spdBtn = document.getElementById("spd");
+let t = 0, playing = false, speed = 1, last = performance.now();
+const setPlaying = p => { playing = p; playBtn.textContent = p ? "❚❚" : "▶"; };
+playBtn.onclick = () => { if (t >= T[N - 1]) t = 0; setPlaying(!playing); };
+spdBtn.onclick = () => { speed = {1: 2, 2: 4, 4: 0.5, 0.5: 1}[speed]; spdBtn.textContent = speed + "×"; };
+seek.oninput = () => { t = seek.value / 1000 * T[N - 1]; pose(t); };
+const sync = document.getElementById("sync");
+addEventListener("message", e => {
+  if (!sync.checked || !e.data || e.data.type !== "sync") return;
+  if (Math.abs(e.data.t - t) > 0.2 || !e.data.playing) t = e.data.t;
+  setPlaying(e.data.playing);
+});
+
+function resize() {
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+addEventListener("resize", resize);
+// 가림 방지: H/버튼으로 하단 바 고정 숨김, 재생 중 마우스가 3초 멈추면 자동 숨김
+let pinnedHidden = false, idle;
+const eye = document.getElementById("eye");
+const showBar = () => { document.body.classList.toggle("hidebar", pinnedHidden);
+  clearTimeout(idle); idle = setTimeout(() => { if (playing) document.body.classList.add("hidebar"); }, 3000); };
+const togglePin = () => { pinnedHidden = !pinnedHidden; eye.textContent = pinnedHidden ? "👁 바 보이기" : "👁 바 숨기기"; showBar(); };
+eye.onclick = togglePin;
+addEventListener("keydown", e => { if (e.key === "h" || e.key === "H") togglePin(); if (e.key === " ") { e.preventDefault(); playBtn.click(); } });
+addEventListener("pointermove", showBar);
+addEventListener("pointerdown", showBar);
+resize();
+if (QS.get("simple")) document.body.classList.add("simple");
+if (QS.get("thumb")) document.body.classList.add("thumb");
+t = Math.min(T[N - 1], Math.max(0, QS.get("t") === "mid" ? T[N - 1] * 0.45 : (+QS.get("t") || 0)));
+// 다른 셀이면 장면 크기에 맞춰 카메라 자동 배치 (?view=ex,ey,ez,tx,ty,tz 로 지정 가능)
+if (QS.get("view")) {
+  const v = QS.get("view").split(",").map(Number);
+  camera.position.set(v[0], v[1], v[2]); controls.target.set(v[3], v[4], v[5]);
+} else {
+  scene.updateMatrixWorld(true);  // 첫 렌더 전이라 월드 행렬을 먼저 갱신해야 범위가 맞다
+  const box = new THREE.Box3();
+  const one = new THREE.Box3(), sz = new THREE.Vector3();
+  scene.traverse(o => {  // 바닥판처럼 50 m 넘는 물체는 범위에서 제외
+    if (!o.isMesh || o.material.opacity <= 0) return;
+    one.setFromObject(o);
+    if (one.getSize(sz).length() < 50) box.union(one);
+  });
+  const c = box.getCenter(new THREE.Vector3()), r = Math.max(1.2, box.getSize(new THREE.Vector3()).length() / 2);
+  controls.target.copy(c);
+  camera.position.set(c.x + r * 1.3, c.y - r * 1.6, c.z + r * 1.2);
+}
+controls.update();
+pose(t);
+if (QS.get("simple") && !QS.get("thumb")) setTimeout(() => setPlaying(true), 600);
+renderer.setAnimationLoop(now => {
+  const dt = (now - last) / 1000; last = now;
+  if (playing) { t += dt * speed; if (t >= T[N - 1]) t = 0; pose(t); }
+  controls.update();
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>

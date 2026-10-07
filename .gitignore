@@ -1,0 +1,10 @@
+__pycache__/
+*.egg-info/
+.venv/
+out/
+build/
+dist/
+.pytest_cache/
+MUJOCO_LOG.TXT
+*.usda
+*_assets/
