@@ -141,20 +141,23 @@ footer code{font-family:var(--mono);font-size:11.5px}
 
 <div class="wrap">
   <header>
-    <h1>botrail 셀 → MuJoCo · Isaac 어댑터</h1>
-    <p>botrail 계획 궤적을 두 물리엔진(MuJoCo · Isaac Sim/PhysX)으로 재현 · 교차검증 — botrail 예제 38셀, TCP 추종오차 대부분 1&nbsp;mm 미만. 엔진 버튼으로 같은 셀을 botrail 스튜디오 / MuJoCo / Isaac 화면에서 비교하세요.</p>
+    <div class="langsw" id="langsw" role="group" aria-label="language">
+      <button data-lang="ko">한국어</button><button data-lang="en">EN</button><button data-lang="ja">日本語</button>
+    </div>
+    <h1 data-i18n="h1">botrail 셀 → MuJoCo · Isaac 어댑터</h1>
+    <p data-i18n="sub">botrail 계획 궤적을 두 물리엔진(MuJoCo · Isaac Sim/PhysX)으로 재현 · 교차검증 — botrail 예제 38셀, TCP 추종오차 대부분 1&nbsp;mm 미만. 엔진 버튼으로 같은 셀을 botrail 스튜디오 / MuJoCo / Isaac 화면에서 비교하세요.</p>
     <div class="stats" id="stats"></div>
   </header>
   <section class="exp" aria-label="실험 항목">
-    <div><b>궤적 추종</b><span>TCP·관절 추종오차 (계획 vs 동역학)</span></div>
-    <div><b>간섭 검출</b><span>링크·툴·워크 접촉, 관입 깊이·시점</span></div>
-    <div><b>구동 한계</b><span>관절 토크 요구치/정격, 속도 한계 초과</span></div>
-    <div><b>엔진 교차검증</b><span>MuJoCo ↔ PhysX 바디 포즈 편차 (mm)</span></div>
-    <div><b>모델 결함</b><span>질량·관성 누락, placeholder 토크 한계</span></div>
-    <div><b>파라미터 실험</b><span>페이로드 · 적분 dt · 토크 한계 on/off (CLI)</span></div>
+    <div><b data-i18n="e1t">궤적 추종</b><span data-i18n="e1d">TCP·관절 추종오차 (계획 vs 동역학)</span></div>
+    <div><b data-i18n="e2t">간섭 검출</b><span data-i18n="e2d">링크·툴·워크 접촉, 관입 깊이·시점</span></div>
+    <div><b data-i18n="e3t">구동 한계</b><span data-i18n="e3d">관절 토크 요구치/정격, 속도 한계 초과</span></div>
+    <div><b data-i18n="e4t">엔진 교차검증</b><span data-i18n="e4d">MuJoCo ↔ PhysX 바디 포즈 편차 (mm)</span></div>
+    <div><b data-i18n="e5t">모델 결함</b><span data-i18n="e5d">질량·관성 누락, placeholder 토크 한계</span></div>
+    <div><b data-i18n="e6t">파라미터 실험</b><span data-i18n="e6d">페이로드 · 적분 dt · 토크 한계 on/off (CLI)</span></div>
   </section>
   <main id="rows" style="display:flex;flex-direction:column;gap:26px"></main>
-  <footer><a href="https://github.com/Dan22dongwon/botrail-mujoco-adapter" target="_blank">코드 (GitHub)</a> · <code>botrail-mujoco</code> (비공식 어댑터) · 셀 설계·계획 궤적은 <b>botrail</b>, 물리 재현·교차검증은 본 어댑터 · 원본 셀: botrail 0.13 예제 · MuJoCo 1 kHz · Isaac Sim/PhysX ≈120 Hz</footer>
+  <footer><a href="https://github.com/Dan22dongwon/botrail-mujoco-adapter" target="_blank" data-i18n="code">코드 (GitHub)</a> · <span data-i18n="foot"><code>botrail-mujoco</code> (비공식 어댑터) · 셀 설계·계획 궤적은 botrail, 물리 재현·교차검증은 본 어댑터 · 원본 셀: botrail 0.13 예제 · MuJoCo 1 kHz · Isaac Sim/PhysX ≈120 Hz</span></footer>
 </div>
 
 <section class="player" id="player" hidden aria-label="3D 재생">
@@ -229,10 +232,67 @@ const INDEX = await fetch(`data/index.json?v=${BUILD}`, {cache: "no-cache"}).the
 const items = INDEX.items, ready = items.filter(x => x.ready);
 
 // ---------- 목록: 공정별 가로 스와이프 행 ----------
-$("stats").innerHTML = `<span><b>${items.filter(x => x.videos?.botrail).length}</b>botrail 셀</span>` +
-  `<span><b>${ready.length}</b>MuJoCo 재현</span>` +
-  `<span><b>${ready.filter(x => x.level === "good").length}</b>PASS</span>` +
-  `<span><b>${ready.filter(x => x.isaac?.supported).length}</b>Isaac 교차검증</span>`;
+// ---------- 언어 전환 (랜딩 chrome: 한/영/일) ----------
+const I18N = {
+  ko: { st_cells: "botrail 셀", st_mj: "MuJoCo 재현", st_pass: "PASS", st_isaac: "Isaac 교차검증" },  // data-i18n HTML 은 원문(ORIG) 사용
+  en: {
+    h1: "botrail cell → MuJoCo · Isaac adapter",
+    sub: "Replays botrail's planned trajectories on two physics engines (MuJoCo · Isaac Sim/PhysX) and cross-validates them — 38 botrail examples, TCP tracking error mostly under 1&nbsp;mm. Use the engine buttons to compare the same cell in botrail Studio / MuJoCo / Isaac.",
+    e1t: "Trajectory tracking", e1d: "TCP & joint tracking error (plan vs dynamics)",
+    e2t: "Collision detection", e2d: "Link/tool/workpiece contacts, penetration depth & time",
+    e3t: "Actuation limits", e3d: "Joint torque demand vs rating, speed-limit violations",
+    e4t: "Engine cross-check", e4d: "MuJoCo ↔ PhysX body-pose deviation (mm)",
+    e5t: "Model defects", e5d: "Missing mass/inertia, placeholder torque limits",
+    e6t: "Parameter experiments", e6d: "Payload · integration dt · torque limits on/off (CLI)",
+    code: "Code (GitHub)",
+    foot: "<code>botrail-mujoco</code> (unofficial adapter) · cell design & planned trajectory by botrail, physics replay & cross-validation by this adapter · source cells: botrail 0.13 examples · MuJoCo 1 kHz · Isaac Sim/PhysX ≈120 Hz",
+    st_cells: "botrail cells", st_mj: "MuJoCo replay", st_pass: "PASS", st_isaac: "Isaac cross-check",
+  },
+  ja: {
+    h1: "botrail セル → MuJoCo・Isaac アダプター",
+    sub: "botrail の計画軌道を2つの物理エンジン（MuJoCo・Isaac Sim/PhysX）で再現・相互検証 — botrail サンプル38セル、TCP追従誤差はほぼ1&nbsp;mm未満。エンジンボタンで同じセルを botrail スタジオ / MuJoCo / Isaac で比較できます。",
+    e1t: "軌道追従", e1d: "TCP・関節の追従誤差（計画 vs 動力学）",
+    e2t: "干渉検出", e2d: "リンク・ツール・ワークの接触、侵入深さ・時刻",
+    e3t: "駆動限界", e3d: "関節トルク要求/定格、速度限界の超過",
+    e4t: "エンジン相互検証", e4d: "MuJoCo ↔ PhysX のボディ姿勢偏差 (mm)",
+    e5t: "モデルの不備", e5d: "質量・慣性の欠落、プレースホルダのトルク限界",
+    e6t: "パラメータ実験", e6d: "ペイロード・積分dt・トルク限界 on/off（CLI）",
+    code: "コード (GitHub)",
+    foot: "<code>botrail-mujoco</code>（非公式アダプター）· セル設計・計画軌道は botrail、物理再現・相互検証は本アダプター · 元セル: botrail 0.13 サンプル · MuJoCo 1 kHz · Isaac Sim/PhysX ≈120 Hz",
+    st_cells: "botrail セル", st_mj: "MuJoCo 再現", st_pass: "PASS", st_isaac: "Isaac 相互検証",
+  },
+};
+let lang = "ko";
+try {
+  const q = new URLSearchParams(location.search).get("lang");          // ?lang=ja 로 직접 지정 (DM 공유용)
+  const nav = (navigator.language || "").slice(0, 2);
+  lang = (["ko", "en", "ja"].includes(q) ? q : null) || localStorage.getItem("lang") || (["ko", "ja"].includes(nav) ? nav : "en");
+} catch { lang = "en"; }
+const tr = k => (I18N[lang] && I18N[lang][k]) || k;
+function renderStats() {
+  $("stats").innerHTML = `<span><b>${items.filter(x => x.videos?.botrail).length}</b>${tr("st_cells")}</span>` +
+    `<span><b>${ready.length}</b>${tr("st_mj")}</span>` +
+    `<span><b>${ready.filter(x => x.level === "good").length}</b>${tr("st_pass")}</span>` +
+    `<span><b>${ready.filter(x => x.isaac?.supported).length}</b>${tr("st_isaac")}</span>`;
+}
+const ORIG = {}; document.querySelectorAll("[data-i18n]").forEach(el => ORIG[el.dataset.i18n] = el.innerHTML);  // 한국어 원문 보관
+function applyLang(l) {
+  lang = l; try { localStorage.setItem("lang", l); } catch {}
+  document.documentElement.lang = l;
+  document.querySelectorAll("[data-i18n]").forEach(el => {
+    const k = el.dataset.i18n;
+    el.innerHTML = l === "ko" ? ORIG[k] : ((I18N[l] || {})[k] ?? ORIG[k]);
+  });
+  renderStats();
+  document.querySelectorAll("#langsw button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.lang === l)));
+}
+{ const s = document.createElement("style"); s.textContent =
+  "header{position:relative}.langsw{position:absolute;top:12px;right:16px;display:flex;gap:4px;z-index:2}" +
+  ".langsw button{font:inherit;font-size:12px;padding:3px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer}" +
+  ".langsw button[aria-pressed=true]{background:var(--ink);color:var(--bg);border-color:var(--ink)}";
+  document.head.appendChild(s); }
+document.querySelectorAll("#langsw button").forEach(b => b.onclick = () => applyLang(b.dataset.lang));
+applyLang(lang);
 const mm = v => v >= 100 ? v.toFixed(0) : v.toFixed(1);
 const playable = x => x.ready || !!x.videos?.botrail;
 function card(x) {
