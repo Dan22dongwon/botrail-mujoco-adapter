@@ -68,7 +68,7 @@ class MujocoAdapter:
     def __init__(self, scene, sequences=None, out_dir="out/mujoco", *, timestep=0.001,
                  grasp_margin=0.6, approach_window=1.5, max_duration=300.0, tcp_payload_kg=0.0,
                  rollout_kwargs=None, allowances=(), torque_limits=True, track_tol_mm=20.0,
-                 view=((2.9, -3.4, 2.6), (0.2, 0.2, 1.0))):
+                 collide_tol_mm=3.0, view=((2.9, -3.4, 2.6), (0.2, 0.2, 1.0))):
         self.scene = scene
         self.sequences = list(sequences or scene.sequence_names)
         if not self.sequences:
@@ -84,6 +84,11 @@ class MujocoAdapter:
         self.allowances = list(allowances)  # 추가 허용 접촉 (allowances.py 형식)
         self.torque_limits = torque_limits  # False: 모델 토크 한계 무시 (기구학·충돌만 검증)
         self.track_tol_mm = track_tol_mm    # TCP 추종 오차가 이보다 크면 verdict = "tracking"
+        # MuJoCo 는 오목 메쉬를 볼록 껍질로 충돌 처리하고, 접촉도 약간의 침투로 힘을 낸다.
+        # botrail 이 애초에 ~0 클리어런스로 닿게 계획한 공정 접촉(용접 전극·포크·발 등)에서는
+        # 이 침투가 기하 근사 오차다. 최대 침투가 이 값 이하인 접촉은 'surface'(얕은 접촉)로 보고
+        # verdict 의 collision 에서 제외한다. 깊은 겹침(팔이 패널을 뚫는 등)은 그대로 collision.
+        self.collide_tol_mm = collide_tol_mm
         # 원래 베이크 인자 (dt, scenario, physics, ...) 그대로. botrail 물리 베이크로 설계된 셀은
         # 부품이 내려앉은 상태를 전제로 계획되므로 physics 를 빼면 계획이 달라진다(실패할 수 있다).
         self.rollout_kwargs = {k: v for k, v in (rollout_kwargs or {}).items() if v is not None}
@@ -537,7 +542,11 @@ class MujocoAdapter:
         if n_init:
             warnings.append(f"시작부터 겹친 접촉 쌍 {n_init}개 — 오목 메쉬의 볼록 껍질화나 장착부 겹침일 가능성 (initial_overlaps 참고)")
         worst = max(robots_rep.values(), key=lambda x: x["max_tcp_err_mm"])
-        hard = {k: v for k, v in contacts.items() if k.startswith("collision")}
+        # 얕은 접촉(최대 침투 ≤ collide_tol_mm)은 볼록껍질·접촉 침투 근사 오차 → collision 에서 제외
+        hard = {k: v for k, v in contacts.items()
+                if k.startswith("collision") and v["max_depth_mm"] > self.collide_tol_mm}
+        surface = {k: v for k, v in contacts.items()
+                   if k.startswith("collision") and v["max_depth_mm"] <= self.collide_tol_mm}
         report = {
             "engine": f"MuJoCo {mujoco.__version__}",
             "sequences": self.sequences,
@@ -552,9 +561,11 @@ class MujocoAdapter:
             "max_joint_err_rad": max(x["max_joint_err_rad"] for x in robots_rep.values()),
             "verdict": "collision" if hard else ("tracking" if worst["max_tcp_err_mm"] > self.track_tol_mm else "pass"),
             "track_tol_mm": self.track_tol_mm,
+            "collide_tol_mm": self.collide_tol_mm,
             "plan_source": getattr(self, "plan_source", "rollout"),
             "warnings": warnings,
             "collisions": hard,
+            "surface_contacts": surface,
             "pregrasp_contacts": {k: v for k, v in contacts.items() if k.startswith("pregrasp")},
             "handling_contacts": {k: v for k, v in contacts.items() if k.startswith("handling")},
             "allowed_contacts": {k: v for k, v in contacts.items() if k.startswith("allowed")},

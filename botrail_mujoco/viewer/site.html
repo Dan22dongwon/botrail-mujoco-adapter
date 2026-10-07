@@ -230,7 +230,7 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", 
 const BUILD = "__BUILD__";  // 배포 때 바뀜 → 브라우저·CDN 캐시에 남은 옛 데이터를 쓰지 않게
 const INDEX = await fetch(`data/index.json?v=${BUILD}`, {cache: "no-cache"}).then(r => r.json());
 const HIDE_CAT = new Set(["그리핑", "셀 엔지니어링", "강화학습", "Export"]);  // DM 용: 공정과 거리 먼 카테고리 숨김
-const HIDE_ID = new Set(["spindle_mounting_demo", "physics_conveyor"]);  // 검증·테스트 성격 셀 숨김 (사용자 요청)
+const HIDE_ID = new Set(["spindle_mounting_demo", "spot_gun_mounting_demo", "physics_conveyor"]);  // 검증·테스트 성격 셀 숨김 (사용자 요청)
 const items = INDEX.items.filter(x => !HIDE_CAT.has(x.category) && !HIDE_ID.has(x.id)), ready = items.filter(x => x.ready);
 const CATS = INDEX.categories.filter(c => !HIDE_CAT.has(c));
 
