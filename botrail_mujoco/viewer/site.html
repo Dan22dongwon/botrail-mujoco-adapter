@@ -170,6 +170,9 @@ footer code{font-family:var(--mono);font-size:11.5px}
       <button data-m="isaac">Isaac Sim</button>
     </div>
     <button class="v3d" id="v3d" aria-pressed="false" title="인터랙티브 3D · 계획 대비 편차 히트맵" data-i18n="p_3d">3D 분석</button>
+    <div class="langsw mini" role="group" aria-label="language">
+      <button data-lang="ko">한</button><button data-lang="en">EN</button><button data-lang="ja">日</button>
+    </div>
     <button class="propbtn" id="propOpen" title="사이클타임·처리량·ROI 제안서 (링크 공유·PDF)" hidden>제안서</button>
   </div>
   <div class="stage" id="stage">
@@ -286,12 +289,12 @@ Object.assign(I18N.ja, { c_norec:"録画なし", c_coll:"干渉", src_botrail:"b
   r_botplan:"botrail 運動学計画（動力学なし）", r_jointerr:"関節追従誤差 max", r_mobile:"ベースは運動学駆動", r_noisaac:"Isaac結果なし", r_noresult:"結果なし",
   CAT:{"머신 텐딩":"マシンテンディング","로봇 가공":"ロボット加工","조립":"組立","용접 (BIW)":"溶接 (BIW)","도장":"塗装","팔레타이징·컨베이어":"パレタイジング・コンベア","물류 (AMR·AGV·AGF)":"物流 (AMR·AGV·AGF)","레그드·휴머노이드":"脚型・ヒューマノイド","멀티 로봇":"マルチロボット","그리핑":"グリッピング","셀 엔지니어링":"セルエンジニアリング","강화학습":"強化学習","Export":"Export","기타":"その他"} });
 const catName = c => lang === "ko" ? c : ((I18N[lang].CAT || {})[c] || c);
-let lang = "ko";
+let lang = "ko";  // 기본값: 한국어
 try {
   const q = new URLSearchParams(location.search).get("lang");          // ?lang=ja 로 직접 지정 (DM 공유용)
-  const nav = (navigator.language || "").slice(0, 2);
-  lang = (["ko", "en", "ja"].includes(q) ? q : null) || localStorage.getItem("lang") || (["ko", "ja"].includes(nav) ? nav : "en");
-} catch { lang = "en"; }
+  // 우선순위: URL ?lang → 사용자가 고른 값(localStorage) → 한국어. (브라우저 언어로 자동 추정하지 않는다)
+  lang = (["ko", "en", "ja"].includes(q) ? q : null) || localStorage.getItem("lang") || "ko";
+} catch { lang = "ko"; }
 const tr = k => (I18N[lang] && I18N[lang][k]) || k;
 const labelTr = l => ({ "PASS": "PASS", "CHECK": "CHECK", "botrail": "botrail", "간섭": tr("l_coll"), "추종 이탈": tr("l_track"), "기준": tr("l_ref"), "N/A": tr("l_na") }[l] || l);
 function renderStats() {
@@ -314,14 +317,15 @@ function applyLang(l) {
     renderRows();
     if (cur && !$("player").hidden) { setMode(mode); $("moreBox").innerHTML = cur.ready ? details(cur) : `<div>${esc(cur.reason)}</div>`; }
   }
-  document.querySelectorAll("#langsw button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.lang === l)));
+  document.querySelectorAll(".langsw button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.lang === l)));
 }
 { const s = document.createElement("style"); s.textContent =
   ".langsw{display:flex;gap:4px;justify-content:flex-end;margin:0 0 8px}" +   /* 제목 위 우측 정렬 — 겹침 없음 */
   ".langsw button{font:inherit;font-size:12px;padding:3px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer}" +
-  ".langsw button[aria-pressed=true]{background:var(--ink);color:var(--bg);border-color:var(--ink)}";
+  ".langsw button[aria-pressed=true]{background:var(--ink);color:var(--bg);border-color:var(--ink)}" +
+  ".langsw.mini{margin:0;flex:0 0 auto}.langsw.mini button{padding:3px 7px}";  /* 플레이어용 인라인 */
   document.head.appendChild(s); }
-document.querySelectorAll("#langsw button").forEach(b => b.onclick = () => applyLang(b.dataset.lang));
+document.querySelectorAll(".langsw button").forEach(b => b.onclick = () => applyLang(b.dataset.lang));
 applyLang(lang);
 const mm = v => v >= 100 ? v.toFixed(0) : v.toFixed(1);
 const playable = x => x.ready || !!x.videos?.botrail;
