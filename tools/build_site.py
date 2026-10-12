@@ -9,6 +9,7 @@
 """
 import argparse
 import base64
+import hashlib
 import json
 import shutil
 import subprocess
@@ -21,7 +22,8 @@ ROOT = Path(__file__).resolve().parents[1]
 CATS = [
     ("머신 텐딩", ["machining/machine_tending_demo", "machining/two_machine_cell_demo"]),
     ("로봇 가공", ["machining/machining_demo", "machining/ati_deburring_demo", "machining/spindle_mounting_demo"]),
-    ("조립", ["assembly/cover_bolting_demo", "assembly/shuttle_line_demo"]),
+    ("조립", ["assembly/cover_bolting_demo", "assembly/misumi_frame_cell_demo", "assembly/ev_battery_harness_demo",
+             "assembly/shuttle_line_demo"]),
     ("용접 (BIW)", ["welding/weld_station_demo", "welding/weld_line_demo", "welding/line_balance_sweep",
                   "welding/nimak_spot_welding_demo", "welding/spot_gun_mounting_demo"]),
     ("도장", ["painting/painting_demo", "painting/painting_hood_demo"]),
@@ -30,8 +32,8 @@ CATS = [
                           "vehicles/forklift_demo", "vehicles/lift_demo", "vehicles/amr_demo",
                           "vehicles/semi_humanoid_demo", "drone/drone_survey_demo"]),
     ("레그드·휴머노이드", ["legged/legged_patrol_demo", "legged/stairs_delivery_demo", "legged/building_delivery_demo",
-                     "legged/humanoid_carry_demo", "legged/wash_inspect_ship_demo"]),
-    ("멀티 로봇", ["multi_robot/dual_arm_demo", "multi_robot/dual_cell_demo"]),
+                     "legged/humanoid_carry_demo", "legged/wash_inspect_ship_demo", "legged/gtp_station_demo"]),
+    ("멀티 로봇", ["multi_robot/dual_arm_demo", "multi_robot/dual_cell_demo", "cloth/tshirt_fold_demo"]),
     ("그리핑", ["basics/gripper_pick_demo", "basics/friction_grasp_demo", "basics/hand_grasp_demo",
              "basics/physics_pick_place", "basics/physics_drop", "basics/physics_world_demo"]),
     ("셀 엔지니어링", ["basics/demo", "basics/sfc_chart_demo", "basics/sweep_demo", "engineering/cell_deliverables_demo",
@@ -49,6 +51,10 @@ TITLE = {
     "machining/spindle_mounting_demo": "스핀들 마운팅 검증",
     "assembly/cover_bolting_demo": "커버 압입·볼트 체결",
     "assembly/shuttle_line_demo": "리니어 셔틀 트랙 조립 라인",
+    "assembly/misumi_frame_cell_demo": "MISUMI 프레임 가드 셀 나사 체결",
+    "assembly/ev_battery_harness_demo": "EV 배터리팩 HV 커넥터 듀얼암 체결",
+    "legged/gtp_station_demo": "휴머노이드 GTP 스테이션 피킹",
+    "cloth/tshirt_fold_demo": "듀얼암 티셔츠 폴딩",
     "welding/weld_station_demo": "BIW 스폿 용접 스테이션",
     "welding/weld_line_demo": "BIW 용접 라인",
     "welding/line_balance_sweep": "용접 라인 밸런싱 (택트 스윕)",
@@ -154,7 +160,21 @@ def shrink(src_json, src_bin, dst_json, dst_bin, fps, max_mb, cell_mm=3.0):
     pos = np.frombuffer(buf, np.float32, meta["pos"][1], meta["pos"][0]).reshape(len(t), nb * 3)
     quat = np.frombuffer(buf, np.float32, meta["quat"][1], meta["quat"][0]).reshape(len(t), nb * 4)
     src_fps = (len(t) - 1) / max(t[-1], 1e-9)
-    mesh_bytes = sum(m["v"][1] * 4 + m["f"][1] * 4 for m in meta["meshes"].values()) * 0.9  # 단순화가 잘 안 되는 메쉬(차체 패널) 대비 보수적으로
+    # 같은 모양의 메시(창고 포드·팔레트·패널 등 위치만 다른 복제본)는 하나만 싣고 geom 위치로 옮긴다.
+    # MJCF 는 geom 마다 메시 자산을 따로 만들어 gtp_station 은 290개 중 71개만 고유 → 29 MB 가 7 MB 로.
+    raw, canon, shift = {}, {}, {}
+    for k, m in meta["meshes"].items():
+        v = np.frombuffer(buf, np.float32, m["v"][1], m["v"][0]).reshape(-1, 3)
+        f = np.frombuffer(buf, np.uint32, m["f"][1], m["f"][0]).reshape(-1, 3)
+        lo = v.min(axis=0) if len(v) else np.zeros(3, np.float32)
+        h = hashlib.md5(np.round((v - lo) * 1e4).astype(np.int64).tobytes() + f.tobytes()).hexdigest()
+        if h in canon:
+            c = canon[h]
+            shift[k] = (c, lo - raw[c][2])   # 이 메시 = 대표 메시 + (lo - lo_대표)
+        else:
+            canon[h] = k
+            raw[k] = (v, f, lo)
+    mesh_bytes = sum(v.nbytes + f.nbytes for v, f, _ in raw.values()) * 0.9  # 단순화가 잘 안 되는 메쉬(차체 패널) 대비 보수적으로
     # 비교 트랙(plan/isaac) 바디 수. 차체(BIW)처럼 리지드 바디가 수백 패널로 쪼개진 셀은 여기가 폭증한다.
     cmp_nb = sum(len(json.loads(tj.read_text()).get("moving", []))
                  for tj in (src_json.with_name("plan.json"), src_json.with_name("isaac.json")) if tj.exists())
@@ -179,12 +199,22 @@ def shrink(src_json, src_bin, dst_json, dst_bin, fps, max_mb, cell_mm=3.0):
         return [start, int(np.asarray(arr).size)]
 
     meshes = {}
-    for k, m in meta["meshes"].items():
-        v = np.frombuffer(buf, np.float32, m["v"][1], m["v"][0]).reshape(-1, 3)
-        f = np.frombuffer(buf, np.uint32, m["f"][1], m["f"][0]).reshape(-1, 3)
+    for k, (v, f, _) in raw.items():
         v, f = decimate(v, f, cell_mm)
         meshes[k] = dict(v=put(v.astype(np.float32).ravel()), f=put(f.astype(np.uint32).ravel()))
-    out = dict(meta, t=[round(float(x), 3) for x in t[idx]], meshes=meshes,
+    geoms = meta.get("geoms", [])
+    if shift:
+        geoms = [dict(g) for g in geoms]
+        for g in geoms:
+            s = shift.get(str(g.get("mesh"))) if g.get("type") == 7 else None
+            if s:
+                w, x, y, z = g["quat"]
+                R = np.array([[1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y)],
+                              [2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x)],
+                              [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)]])
+                g["mesh"] = int(s[0]) if str(s[0]).isdigit() else s[0]
+                g["pos"] = [round(float(p), 6) for p in np.asarray(g["pos"]) + R @ s[1]]
+    out = dict(meta, t=[round(float(x), 3) for x in t[idx]], meshes=meshes, geoms=geoms,
                pos=put(pos[idx].astype(np.float32)), quat=put(quat[idx].astype(np.float32)),
                tcp_mm=[meta["tcp_mm"][i] for i in idx])
     # 비교용 트랙: botrail 계획(plan) · Isaac Sim(isaac). 같은 MuJoCo 바디 순서, 웹 프레임 시각으로 맞춘다.

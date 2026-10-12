@@ -4,15 +4,35 @@
 """
 import argparse
 import functools
+import gzip
+import io
 import os
 import re
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+
+
+GZIP_EXT = (".json", ".txt", ".html", ".js", ".css")
+_gz_cache: dict = {}   # path → (mtime, 압축본) — 3D 데이터(base64 .bin.txt)는 gzip 으로 ~1/3 (원격·폰 미리보기)
 
 
 class RangeHandler(SimpleHTTPRequestHandler):
     def send_head(self):
         rng = self.headers.get("Range")
         path = self.translate_path(self.path)
+        if not rng and os.path.isfile(path) and path.endswith(GZIP_EXT) \
+                and "gzip" in self.headers.get("Accept-Encoding", ""):
+            mt = os.path.getmtime(path)
+            hit = _gz_cache.get(path)
+            if not hit or hit[0] != mt:
+                with open(path, "rb") as fh:
+                    hit = _gz_cache[path] = (mt, gzip.compress(fh.read(), 6))
+            self.send_response(200)
+            self.send_header("Content-Type", self.guess_type(path))
+            self.send_header("Content-Encoding", "gzip")
+            self.send_header("Content-Length", str(len(hit[1])))
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            return io.BytesIO(hit[1])
         if not rng or not os.path.isfile(path):
             return super().send_head()
         m = re.match(r"bytes=(\d*)-(\d*)", rng)

@@ -104,21 +104,32 @@ class _Geoms:
         self.cache = UsdGeom.XformCache()
         self.out_dir = out_dir
         self.meshes: list[tuple[str, str]] = []
+        self.flat: set[str] = set()   # 두께 0 메시(바닥 사각판 등) → MuJoCo 가 부피 관성 계산을 거부 → inertia="shell"
         self.n = 0
 
     @staticmethod
     def color(prim):
+        # 투명 패널(PC·아크릴 가드, 펜스)은 displayOpacity 또는 재질 inputs:opacity 로 온다
+        alpha = 1.0
+        if prim.HasAttribute("primvars:displayOpacity"):
+            do = prim.GetAttribute("primvars:displayOpacity").Get()
+            if do:
+                alpha = float(do[0])
+        rgb = None
         if prim.HasAttribute("primvars:displayColor"):
             dc = prim.GetAttribute("primvars:displayColor").Get()
             if dc:
-                return [*dc[0], 1.0]
+                rgb = list(dc[0])
         mat, _ = UsdShade.MaterialBindingAPI(prim).ComputeBoundMaterial()
         if mat:
             for sh in Usd.PrimRange(mat.GetPrim()):
                 a = sh.GetAttribute("inputs:diffuseColor")
-                if a and a.Get() is not None:
-                    return [*a.Get(), 1.0]
-        return [0.75, 0.77, 0.8, 1.0]
+                if rgb is None and a and a.Get() is not None:
+                    rgb = list(a.Get())
+                o = sh.GetAttribute("inputs:opacity")
+                if o and o.Get() is not None:
+                    alpha = min(alpha, float(o.Get()))
+        return [*(rgb or [0.75, 0.77, 0.8]), alpha]
 
     def emit(self, root, body_world, bits_collide, skip=(), out_names=None, prune_bodies=False):
         out = []
@@ -185,6 +196,9 @@ class _Geoms:
         counts = mesh.GetFaceVertexCountsAttr().Get()
         idx = mesh.GetFaceVertexIndicesAttr().Get()
         pts = (M[:3, :3] @ pts.T).T + M[:3, 3]
+        ext = np.ptp(pts, axis=0)
+        if ext.min() <= 1e-6 * max(ext.max(), 1e-9):
+            self.flat.add(f"m{self.n}")
         d = self.out_dir / "meshes"
         d.mkdir(parents=True, exist_ok=True)
         path = d / f"m{self.n}.obj"
@@ -431,7 +445,7 @@ def convert(usd_path: Path, out_dir: Path, moving: list[str], *, timestep=0.001,
     <texture name="sky" type="skybox" builtin="flat" rgb1="0.86 0.86 0.85" rgb2="0.86 0.86 0.85" width="32" height="32"/>
     <texture name="grid" type="2d" builtin="checker" rgb1="0.82 0.82 0.8" rgb2="0.78 0.78 0.76" width="512" height="512"/>
     <material name="floor" texture="grid" texrepeat="8 8" reflectance="0.05"/>
-{chr(10).join(f'    <mesh name="{n}" file="{f}"/>' for n, f in g.meshes)}
+{chr(10).join(f'    <mesh name="{n}" file="{f}"' + (' inertia="shell"' if n in g.flat else '') + '/>' for n, f in g.meshes)}
   </asset>
   <worldbody>
     <light directional="true" pos="2 -3 6" dir="-0.3 0.4 -1" diffuse="0.6 0.6 0.6" castshadow="true"/>

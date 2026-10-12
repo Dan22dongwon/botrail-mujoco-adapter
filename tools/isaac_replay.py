@@ -231,12 +231,36 @@ def main():
         # 강체는 모두 정적(rigidBodyEnabled=False)으로 돌려 충돌체로만 남긴다. 이동체는 그 위에 xform op 로
         # 운동학적 이동을 그대로 한다. (MuJoCo 변환은 이런 집기를 처음부터 정적 geom 으로 둬 문제가 없었다.)
         robot_roots = [r["root"] for r in job["robots"]]
+        # 로봇 링크는 경로 하위만이 아니다: 휴머노이드(gtp_station h2)는 링크가 루트(pelvis)의 형제
+        # (/World/Robot/<link>) 로 나온다 → 켜진 조인트 그래프로 루트에서 닿는 강체를 모두 로봇 링크로 본다
+        adj = {}
+        for prim in stage.Traverse():
+            if not prim.IsA(UsdPhysics.Joint):
+                continue
+            j = UsdPhysics.Joint(prim)
+            en = j.GetJointEnabledAttr().Get()
+            if en is False:
+                continue
+            b = [str(t) for rel in (j.GetBody0Rel(), j.GetBody1Rel()) for t in rel.GetTargets()]
+            if len(b) == 2:
+                adj.setdefault(b[0], set()).add(b[1])
+                adj.setdefault(b[1], set()).add(b[0])
+        robot_links = set()
+        for rr in robot_roots:   # 루트의 부모 컨테이너 밖(받침대·/World/Env 차대)으로는 넘어가지 않는다
+            box, todo = rr.rsplit("/", 1)[0] + "/", [rr]
+            if box.count("/") < 3:   # /World/<robot> 자체가 루트면 그 하위로만
+                box = rr + "/"
+            while todo:
+                q = todo.pop()
+                if q not in robot_links and (q == rr or q.startswith(box)):
+                    robot_links.add(q)
+                    todo.extend(adj.get(q, ()))
         n_static = 0
         for prim in stage.Traverse():
             p = str(prim.GetPath())
             if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
                 continue
-            if any(p == rr or p.startswith(rr + "/") for rr in robot_roots):
+            if p in robot_links or any(p == rr or p.startswith(rr + "/") for rr in robot_roots):
                 continue  # 로봇 아티큘레이션 링크(모바일 루트 포함)는 건드리지 않는다
             api = UsdPhysics.RigidBodyAPI(prim)
             en = api.GetRigidBodyEnabledAttr()

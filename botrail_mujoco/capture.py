@@ -22,6 +22,13 @@ class Capture:
     kwargs: dict = field(default_factory=dict)
 
 
+def _extra_argv() -> list:
+    """갤러리 실행용 예제 인자 (예: gtp_station 의 --no-ceiling). tools/add_cell.sh 가 tools/cell_args.json 에서 넣는다."""
+    import os
+    import shlex
+    return shlex.split(os.environ.get("BOTRAIL_EXAMPLE_ARGS", ""))
+
+
 MIN_CYCLE_S = 1.0  # 이보다 짧은 베이크는 본 사이클이 아니라 탐색용으로 본다
 ROLLOUT_KW = ("dt", "max_duration", "plan_resolution", "scenario", "toolpath_spin", "physics")
 
@@ -56,7 +63,7 @@ def capture_from_script(path, argv=None) -> Capture:
         for n in orig:
             setattr(cls, n, grab(n))
         bt.studio = lambda *a, **k: None
-        sys.argv = [str(path), *(argv or [])]
+        sys.argv = [str(path), *(argv or []), *_extra_argv()]
         sys.path.insert(0, str(path.parent))
         from .allowances import record_allowances
         try:
@@ -108,7 +115,7 @@ def studio_scene_from_script(path, prefer_sequences=False) -> StudioCapture:
     old_argv, old_path = sys.argv, list(sys.path)
     try:
         bt.studio = fake_studio
-        sys.argv = [str(path), "--studio"]
+        sys.argv = [str(path), "--studio", *_extra_argv()]
         sys.path.insert(0, str(path.parent))
         from .allowances import record_allowances
         try:
@@ -155,7 +162,7 @@ def studio_scene_from_script(path, prefer_sequences=False) -> StudioCapture:
         for n in names:
             setattr(cls, n, grab(n))
         bt.export_cell = grab_cell
-        sys.argv = [str(path)]
+        sys.argv = [str(path), *_extra_argv()]
         sys.path.insert(0, str(path.parent))
         try:
             runpy.run_path(str(path), run_name="__main__")
